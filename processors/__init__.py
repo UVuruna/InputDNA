@@ -108,7 +108,11 @@ class EventProcessor:
         """Route raw event to appropriate sub-processor."""
         if isinstance(event, RawMouseMove):
             # Check drag first — if dragging, don't feed to session detector
+            was_dragging = self._drag_det.is_dragging
             if self._drag_det.process_move(event):
+                if not was_dragging:
+                    # Drag just confirmed — end any active movement session
+                    self._mouse_session.end_for_drag()
                 return  # Move consumed by drag
             self._mouse_session.process_move(event)
 

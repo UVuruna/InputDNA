@@ -96,6 +96,11 @@ class MouseSessionDetector:
         if elapsed >= config.SESSION_END_TIMEOUT_MS:
             self._end_session("idle")
 
+    def end_for_drag(self):
+        """End current session because a drag operation began."""
+        if self._active and self._points:
+            self._end_session("drag")
+
     def flush(self):
         """Force-end current session (e.g., on shutdown)."""
         if self._active and self._points:
