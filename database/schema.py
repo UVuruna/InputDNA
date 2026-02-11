@@ -28,6 +28,15 @@ def init_db(db_path: Path) -> sqlite3.Connection:
 
     # ── Create tables ──────────────────────────────────────
     conn.executescript(_SCHEMA)
+
+    # ── Encoding metadata ─────────────────────────────────
+    # Signals to post-processing that path_points and drag_points
+    # use delta encoding: seq=0 is absolute, seq>0 is delta from previous.
+    conn.execute(
+        "INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)",
+        ("path_encoding", "delta_v1"),
+    )
+
     conn.commit()
     return conn
 

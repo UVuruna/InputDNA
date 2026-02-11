@@ -3,6 +3,11 @@ Processed record data classes — produced by processors, consumed by DB writer.
 
 Each record type has a write_to_db(conn) method that performs the actual
 INSERT into the appropriate SQLite table(s).
+
+Path points use delta encoding: seq=0 stores absolute (x, y, t_ns),
+seq>0 stores deltas from the previous point (dx, dy, dt_ns).
+Post-processing reconstructs absolute values via cumulative sum.
+Metadata key 'path_encoding'='delta_v1' signals this to readers.
 """
 
 from dataclasses import dataclass, field
@@ -20,6 +25,27 @@ class PathPoint:
     x: int
     y: int
     t_ns: int
+
+
+def _delta_encode_points(parent_id: int, points: List[PathPoint]) -> list[tuple]:
+    """
+    Delta-encode a list of PathPoints for DB storage.
+
+    Returns list of (parent_id, seq, x_or_dx, y_or_dy, t_ns_or_dt_ns) tuples.
+    First point (seq=0): absolute values.
+    Subsequent points: delta from previous point.
+    """
+    if not points:
+        return []
+    rows = [(parent_id, 0, points[0].x, points[0].y, points[0].t_ns)]
+    for i in range(1, len(points)):
+        rows.append((
+            parent_id, i,
+            points[i].x - points[i - 1].x,
+            points[i].y - points[i - 1].y,
+            points[i].t_ns - points[i - 1].t_ns,
+        ))
+    return rows
 
 
 # ─────────────────────────────────────────────────────────────
@@ -69,8 +95,7 @@ class MovementSession:
         if self.path_points:
             cur.executemany(
                 "INSERT INTO path_points (movement_id, seq, x, y, t_ns) VALUES (?,?,?,?,?)",
-                [(self.movement_id, i, p.x, p.y, p.t_ns)
-                 for i, p in enumerate(self.path_points)]
+                _delta_encode_points(self.movement_id, self.path_points),
             )
 
 
@@ -142,7 +167,7 @@ class DragRecord:
         if self.path_points:
             cur.executemany(
                 "INSERT INTO drag_points (drag_id, seq, x, y, t_ns) VALUES (?,?,?,?,?)",
-                [(drag_id, i, p.x, p.y, p.t_ns) for i, p in enumerate(self.path_points)]
+                _delta_encode_points(drag_id, self.path_points),
             )
 
 
