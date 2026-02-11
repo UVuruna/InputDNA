@@ -7,9 +7,10 @@ are being recorded and modeled — their personalized robot.
 """
 
 import sqlite3
-from pathlib import Path
 from typing import Optional, Dict
 from dataclasses import dataclass
+
+import config
 
 
 @dataclass
@@ -21,12 +22,12 @@ class UserProfile:
     created_at: str
 
 
-DB_PATH = Path(__file__).parent.parent / "data" / "profiles.db"
+PROFILES_DB_PATH = config.DB_DIR / "profiles.db"
 
 
 def _get_conn() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+    PROFILES_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(PROFILES_DB_PATH))
     conn.execute("""
         CREATE TABLE IF NOT EXISTS profiles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -5,12 +5,27 @@ All configurable values in one place. Adjust these based on your
 hardware and preferences. No other file should contain magic numbers.
 """
 
+import os
+import sys
 from pathlib import Path
+
+# ─────────────────────────────────────────────────────────────
+# DATA DIRECTORIES
+# ─────────────────────────────────────────────────────────────
+# Installed (PyInstaller exe): AppData\Local\InputDNA\
+# Development: local data/ folder next to source
+if getattr(sys, 'frozen', False):
+    DATA_DIR = Path(os.environ['LOCALAPPDATA']) / "InputDNA"
+else:
+    DATA_DIR = Path(__file__).parent / "data"
+
+DB_DIR = DATA_DIR / "db"
+LOG_DIR = DATA_DIR / "logs"
 
 # ─────────────────────────────────────────────────────────────
 # DATABASE
 # ─────────────────────────────────────────────────────────────
-DB_PATH = Path(__file__).parent / "data" / "movements.db"
+DB_PATH = DB_DIR / "movements.db"
 
 # ─────────────────────────────────────────────────────────────
 # MOUSE SESSION DETECTION
