@@ -73,6 +73,15 @@ def get_keyboard_layout() -> str:
     return hex(layout_id & 0xFFFFFFFF)
 
 
+def get_system_double_click_time() -> int:
+    """
+    Get Windows system double-click time in milliseconds.
+    This is the maximum interval Windows considers a double-click.
+    Control Panel → Mouse → Buttons → Double-click speed.
+    """
+    return _user32.GetDoubleClickTime()
+
+
 def get_all_state() -> dict[str, str]:
     """Read all monitored system settings as a dict."""
     return {

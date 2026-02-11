@@ -134,6 +134,12 @@ POLLING_RATE_SAMPLE_COUNT = 500
 HOTKEY_TOGGLE = "<ctrl>+<alt>+r"
 
 # ─────────────────────────────────────────────────────────────
+# CALIBRATION
+# ─────────────────────────────────────────────────────────────
+# Number of clicks required for click speed calibration.
+CALIBRATION_CLICK_COUNT = 20
+
+# ─────────────────────────────────────────────────────────────
 # USER SETTINGS (GUI-configurable)
 # ─────────────────────────────────────────────────────────────
 # Mouse DPI — hardware-specific, entered manually or measured by user.
