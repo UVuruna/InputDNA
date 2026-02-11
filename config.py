@@ -132,3 +132,67 @@ POLLING_RATE_SAMPLE_COUNT = 500
 # ─────────────────────────────────────────────────────────────
 # Global hotkey to pause/resume recording.
 HOTKEY_TOGGLE = "<ctrl>+<alt>+r"
+
+# ─────────────────────────────────────────────────────────────
+# USER SETTINGS (GUI-configurable)
+# ─────────────────────────────────────────────────────────────
+# Mouse DPI — hardware-specific, entered manually or measured by user.
+USER_DPI = 800
+
+# Auto-start recording on Windows login.
+START_WITH_WINDOWS = False
+
+# ─────────────────────────────────────────────────────────────
+# PER-USER SETTINGS OVERRIDE
+# ─────────────────────────────────────────────────────────────
+# Mapping from user_settings DB keys to (config attribute, type converter).
+# Used by apply_user_settings() to override defaults at runtime.
+_SETTING_MAP: dict[str, tuple[str, type]] = {
+    "recording.downsample_hz":          ("DOWNSAMPLE_HZ", int),
+    "recording.session_end_timeout_ms": ("SESSION_END_TIMEOUT_MS", int),
+    "recording.min_session_distance_px":("MIN_SESSION_DISTANCE_PX", int),
+    "recording.db_rotation_max_bytes":  ("DB_ROTATION_MAX_BYTES", int),
+    "recording.hotkey_toggle":          ("HOTKEY_TOGGLE", str),
+    "recording.click_sequence_gap_ms":  ("CLICK_SEQUENCE_GAP_MS", int),
+    "system.dpi":                       ("USER_DPI", int),
+    "system.start_with_windows":        ("START_WITH_WINDOWS", lambda v: v.lower() == "true"),
+}
+
+# Snapshot of default values — populated at module load, used by reset_to_defaults().
+_DEFAULTS: dict[str, object] = {}
+
+
+def _capture_defaults() -> None:
+    """Snapshot all overridable config values at import time."""
+    import sys
+    module = sys.modules[__name__]
+    for _key, (attr, _conv) in _SETTING_MAP.items():
+        _DEFAULTS[attr] = getattr(module, attr)
+
+
+def apply_user_settings(settings: dict[str, str]) -> None:
+    """
+    Override config module attributes with per-user settings.
+
+    Called once at login time. All code reading config.* will see
+    the overridden values. Thread-safe because this runs before
+    recorder threads start.
+    """
+    import sys
+    module = sys.modules[__name__]
+    for key, value in settings.items():
+        if key in _SETTING_MAP:
+            attr, converter = _SETTING_MAP[key]
+            setattr(module, attr, converter(value))
+
+
+def reset_to_defaults() -> None:
+    """Restore all config values to their original defaults (on logout)."""
+    import sys
+    module = sys.modules[__name__]
+    for attr, default_value in _DEFAULTS.items():
+        setattr(module, attr, default_value)
+
+
+# Capture defaults at module load time.
+_capture_defaults()

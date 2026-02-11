@@ -158,4 +158,124 @@ QProgressBar::chunk {
     background-color: #e94560;
     border-radius: 5px;
 }
+
+QComboBox {
+    background-color: #16213e;
+    color: #eee;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    min-width: 120px;
+}
+
+QComboBox:hover {
+    border: 1px solid #e94560;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 24px;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #aaa;
+    margin-right: 8px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #16213e;
+    color: #eee;
+    selection-background-color: #0f3460;
+    selection-color: #eee;
+    border: 1px solid #0f3460;
+}
+
+QSlider::groove:horizontal {
+    border: none;
+    height: 6px;
+    background-color: #16213e;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background-color: #e94560;
+    width: 16px;
+    height: 16px;
+    margin: -5px 0;
+    border-radius: 8px;
+}
+
+QSlider::handle:horizontal:hover {
+    background-color: #ff6b81;
+}
+
+QSlider::sub-page:horizontal {
+    background-color: #e94560;
+    border-radius: 3px;
+}
+
+QSpinBox, QDoubleSpinBox {
+    background-color: #16213e;
+    color: #eee;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 14px;
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid #e94560;
+}
+
+QSpinBox::up-button, QSpinBox::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+    background-color: #0f3460;
+    border: none;
+    width: 20px;
+}
+
+QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {
+    background-color: #1a4a8a;
+}
+
+QCheckBox {
+    spacing: 8px;
+    color: #eee;
+    font-size: 14px;
+}
+
+QCheckBox::indicator {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #0f3460;
+    border-radius: 4px;
+    background-color: #16213e;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #e94560;
+    border-color: #e94560;
+}
+
+QCheckBox::indicator:hover {
+    border-color: #e94560;
+}
+
+QKeySequenceEdit {
+    background-color: #16213e;
+    color: #eee;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 14px;
+}
+
+QKeySequenceEdit:focus {
+    border: 1px solid #e94560;
+}
 """

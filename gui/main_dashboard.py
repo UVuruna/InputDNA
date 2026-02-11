@@ -26,6 +26,7 @@ class MainDashboard(QWidget):
     stop_recording_signal = Signal()
     train_model_signal = Signal()
     validate_model_signal = Signal()
+    settings_signal = Signal()
     logout_signal = Signal()
 
     def __init__(self, user: UserProfile, parent=None):
@@ -61,6 +62,11 @@ class MainDashboard(QWidget):
         user_label = QLabel(f"User: {self._user.username} ({self._user.surname})")
         user_label.setObjectName("subtitle")
         header.addWidget(user_label)
+
+        settings_btn = QPushButton("Settings")
+        settings_btn.setFixedWidth(90)
+        settings_btn.clicked.connect(self.settings_signal.emit)
+        header.addWidget(settings_btn)
 
         logout_btn = QPushButton("Logout")
         logout_btn.setFixedWidth(80)
