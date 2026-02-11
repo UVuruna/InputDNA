@@ -27,6 +27,12 @@ LOG_DIR = DATA_DIR / "logs"
 # ─────────────────────────────────────────────────────────────
 DB_PATH = DB_DIR / "movements.db"
 
+# Rotate to a new DB file when the active DB exceeds this size.
+# Check happens once at session start, not during recording.
+# Old file is renamed with a timestamp suffix and VACUUMed in background.
+# Set to 0 to disable rotation.
+DB_ROTATION_MAX_BYTES = 5 * 1024 * 1024 * 1024  # 5 GB
+
 # ─────────────────────────────────────────────────────────────
 # PATH POINT SAMPLING
 # ─────────────────────────────────────────────────────────────

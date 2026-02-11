@@ -26,6 +26,7 @@ from pathlib import Path
 
 import config
 from database.schema import init_db
+from database.rotation import check_and_rotate
 from database.writer import DatabaseWriter
 from listeners.mouse_listener import MouseListener
 from listeners.keyboard_listener import KeyboardListener
@@ -64,9 +65,10 @@ class Recorder:
         logger.info("Human Input Recorder starting...")
         logger.info("=" * 50)
 
-        # 1. Init database
-        logger.info(f"Database: {config.DB_PATH}")
+        # 1. Init database (rotate if over size threshold)
         config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        check_and_rotate(config.DB_PATH)
+        logger.info(f"Database: {config.DB_PATH}")
         conn = init_db(config.DB_PATH)
 
         # Create recording session
