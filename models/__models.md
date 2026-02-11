@@ -37,7 +37,7 @@ us plus a precise timestamp.
 
 | Class | Trigger | Fields |
 |-------|---------|--------|
-| `RawKeyPress` | Key pressed | `scan_code`, `key_name`, `t_ns`, `modifier_state` |
+| `RawKeyPress` | Key pressed | `scan_code`, `vkey`, `key_name`, `t_ns`, `modifier_state`, `active_layout` |
 | `RawKeyRelease` | Key released | `scan_code`, `key_name`, `t_ns`, `press_duration_ms` |
 
 > **Note:** All timestamps use `time.perf_counter_ns()` — monotonic, integer nanoseconds,
@@ -66,7 +66,7 @@ into the correct table(s).
 
 | Class | DB Table | Description |
 |-------|----------|-------------|
-| `KeystrokeRecord` | `keystrokes` | One key press with duration + hand/finger |
+| `KeystrokeRecord` | `keystrokes` | One key press with duration, vkey, layout, hand/finger |
 | `KeyTransitionRecord` | `key_transitions` | Delay between two consecutive keys |
 | `ShortcutRecord` | `shortcuts` | Modifier+key combo timing profile |
 
@@ -74,6 +74,7 @@ into the correct table(s).
 
 | Class | DB Table | Description |
 |-------|----------|-------------|
+| `SystemEventRecord` | `system_events` | Tracks a system state change |
 | `RecordingSessionRecord` | `recording_sessions` | One recording period (start→stop) |
 
 <a id="data-flow"></a>

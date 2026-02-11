@@ -75,7 +75,19 @@ date of birth. Login requires username only. Profile stored in
 ### `main_dashboard.py` — Main Control Panel
 
 Three buttons + status area. Shows current user info, recording
-status, and model status.
+status, model status, and system info panel.
+
+**System Info panel** displays live system data:
+
+| Field | Source | Example |
+|-------|--------|---------|
+| Keyboard Layout | `SystemMonitor` | `0x04090409` |
+| Polling Rate | `PollingRateEstimator` | `~1000 Hz` |
+| Mouse Speed | `SystemMonitor` | `10` |
+| Acceleration | `SystemMonitor` | `On` / `Off` |
+| Resolution | `SystemMonitor` | `1920x1080` |
+
+Updated via `update_system_info()` method called from the application layer.
 
 ### `validation_screen.py` — Model Validation View
 

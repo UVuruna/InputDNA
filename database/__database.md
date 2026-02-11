@@ -35,11 +35,12 @@ uses `IF NOT EXISTS`.
 | `drags` | Mouse | Click-hold-move-release operations |
 | `drag_points` | Mouse | Path coordinates during drags |
 | `scrolls` | Mouse | Scroll wheel events |
-| `keystrokes` | Keyboard | Individual key presses with scan codes |
+| `keystrokes` | Keyboard | Individual key presses with scan codes, vkey, and layout |
 | `key_transitions` | Keyboard | Delay between consecutive keys (scan code pairs) |
 | `shortcuts` | Keyboard | Keyboard shortcut timing profiles |
 | `recording_sessions` | Meta | Recording periods (start/end/counts) |
-| `metadata` | Meta | Key-value config/stats |
+| `system_events` | System | Tracks changes to system state (mouse speed, layout, resolution, etc.) |
+| `metadata` | Meta | Static key-value config/stats |
 
 **SQLite pragmas applied:**
 

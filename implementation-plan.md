@@ -448,7 +448,19 @@ Note: `t_ns` is raw perf_counter nanoseconds. Relative timing between points is 
 | total_keystrokes | INTEGER | Count |
 | perf_counter_start_ns | INTEGER | Reference for converting t_ns to relative time |
 
-**Table: `metadata`** — Key-value config
+**Table: `system_events`** — Tracks system state changes over time
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER PK | Auto-increment |
+| key | TEXT | Setting name (e.g. "mouse_speed", "screen_resolution") |
+| value | TEXT | Setting value |
+| t_ns | INTEGER | perf_counter_ns |
+| timestamp | TEXT | ISO wall clock |
+
+Initial state recorded at recording session start. New row inserted only when a value changes.
+
+**Table: `metadata`** — Static key-value config
 
 | Column | Type | Description |
 |--------|------|-------------|

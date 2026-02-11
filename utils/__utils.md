@@ -13,6 +13,7 @@ functions with no state — any module can import and use them freely.
   🐍 __init__.py
   🐍 timing.py
   🐍 keyboard_layout.py
+  🐍 system_monitor.py
   🐍 hotkeys.py
 ```
 
@@ -65,6 +66,28 @@ the same physical key regardless of which language layout is active
 | `get_position(scan_code)` | `tuple?` | `(row, col)` grid position |
 
 **Coverage:** Full alphanumeric, function keys, navigation cluster, arrow keys, numpad.
+
+### `system_monitor.py` — System State Monitor
+
+Periodically checks system settings that affect input behavior and emits
+`SystemEventRecord` when a value changes. Also provides `PollingRateEstimator`
+for estimating mouse polling rate from move event timestamps.
+
+**Monitored settings:**
+
+| Setting | Windows API | Example value |
+|---------|-------------|---------------|
+| Mouse speed (1-20) | `SystemParametersInfoW(SPI_GETMOUSESPEED)` | `"10"` |
+| Mouse acceleration | `SystemParametersInfoW(SPI_GETMOUSE)` | `"True"` / `"False"` |
+| Screen resolution | `GetSystemMetrics` | `"1920x1080"` |
+| Keyboard layout | `GetKeyboardLayout` | `"0x04090409"` |
+
+**Classes:**
+
+| Class | Purpose |
+|-------|---------|
+| `SystemMonitor` | Polls system state, emits `SystemEventRecord` on change |
+| `PollingRateEstimator` | Estimates mouse Hz from move event intervals |
 
 ### `hotkeys.py` — Global Hotkey Registration
 

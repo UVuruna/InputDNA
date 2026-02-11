@@ -48,7 +48,7 @@ Maintains modifier state (`ctrl`, `alt`, `shift`, `win`) internally.
 
 | Event | Trigger | Data |
 |-------|---------|------|
-| `RawKeyPress` | Key pressed down | scan_code, key_name, t_ns, modifier_state |
+| `RawKeyPress` | Key pressed down | scan_code, vkey, key_name, t_ns, modifier_state, active_layout |
 | `RawKeyRelease` | Key released | scan_code, key_name, t_ns, press_duration_ms |
 
 Calculates key press duration (press→release) and pushes completed
