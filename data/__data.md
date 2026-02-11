@@ -18,8 +18,13 @@ selects the correct path based on `sys.frozen`.
 📁 data/
   📝 __data.md
   📁 db/
-    🗄️ movements.db        ← created at runtime (gitignored)
-    🗄️ profiles.db         ← user profiles (gitignored)
+    🗄️ profiles.db             ← shared user profiles (gitignored)
+    🗄️ movements.db            ← headless mode fallback (gitignored)
+    📁 user_1/
+      🗄️ movements.db          ← Alice's recording data
+      🗄️ movements_20260211.db ← rotated archive
+    📁 user_2/
+      🗄️ movements.db          ← Bob's recording data
   📁 logs/
     (future log files)
 ```
@@ -29,19 +34,33 @@ selects the correct path based on `sys.frozen`.
 ```
 📁 %LOCALAPPDATA%\InputDNA\
   📁 db\
-    🗄️ movements.db
     🗄️ profiles.db
+    📁 user_1\
+      🗄️ movements.db
+    📁 user_2\
+      🗄️ movements.db
   📁 logs\
 ```
 
+### Per-user Database Isolation
+
+Each registered user gets their own subfolder: `db/user_{id}/`. This ensures:
+- ML trains on one user's data only — no cross-contamination
+- Easy backup/deletion per user
+- DB rotation archives stay in the user's folder
+- `profiles.db` remains shared (stores all user profiles and settings)
+
+When running in headless mode (no GUI, `python main.py`), the fallback
+`db/movements.db` is used. See `config.get_user_db_path()` for the path logic.
+
 <a id="database"></a>
 
-## `movements.db` — Main Recording Database
+## `movements.db` — Recording Database (Per-user)
 
-SQLite database (WAL mode) containing ALL recorded human input data.
-Created by `database/schema.py` on first launch via `main.py`.
+SQLite database (WAL mode) containing recorded human input data for a single user.
+Created by `database/schema.py` on first recording session for that user.
 
-**Database size estimate:** ~150-200 MB per month of typical desktop use.
+**Database size estimate:** ~150-200 MB per month of typical desktop use (125 Hz mouse).
 
 <a id="tables"></a>
 

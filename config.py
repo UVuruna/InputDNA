@@ -25,7 +25,28 @@ LOG_DIR = DATA_DIR / "logs"
 # ─────────────────────────────────────────────────────────────
 # DATABASE
 # ─────────────────────────────────────────────────────────────
+# Default DB path for headless mode (no logged-in user).
+# When a user is logged in, use get_user_db_path(user_id) instead.
 DB_PATH = DB_DIR / "movements.db"
+
+# Active DB path set at runtime by the Recorder after login.
+_active_db_path: Path | None = None
+
+
+def get_user_db_path(user_id: int) -> Path:
+    """Per-user database path: data/db/user_{id}/movements.db"""
+    return DB_DIR / f"user_{user_id}" / "movements.db"
+
+
+def get_active_db_path() -> Path:
+    """Return the currently active DB path (per-user or fallback)."""
+    return _active_db_path or DB_PATH
+
+
+def set_active_db_path(path: Path) -> None:
+    """Set the active DB path (called by Recorder on start)."""
+    global _active_db_path
+    _active_db_path = path
 
 # Rotate to a new DB file when the active DB exceeds this size.
 # Check happens once at session start, not during recording.

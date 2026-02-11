@@ -48,7 +48,12 @@ logger = logging.getLogger("main")
 class Recorder:
     """Main recorder application."""
 
-    def __init__(self):
+    def __init__(self, user_id: int | None = None):
+        self._user_id = user_id
+        self._db_path: Path = (
+            config.get_user_db_path(user_id) if user_id is not None
+            else config.DB_PATH
+        )
         self._event_queue: queue.Queue = queue.Queue()
         self._db_writer: DatabaseWriter | None = None
         self._mouse_listener: MouseListener | None = None
@@ -66,10 +71,11 @@ class Recorder:
         logger.info("=" * 50)
 
         # 1. Init database (rotate if over size threshold)
-        config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        check_and_rotate(config.DB_PATH)
-        logger.info(f"Database: {config.DB_PATH}")
-        conn = init_db(config.DB_PATH)
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        config.set_active_db_path(self._db_path)
+        check_and_rotate(self._db_path)
+        logger.info(f"Database: {self._db_path}")
+        conn = init_db(self._db_path)
 
         # Create recording session
         self._recording_session = RecordingSessionRecord(
@@ -82,7 +88,7 @@ class Recorder:
         logger.info(f"Recording session #{self._session_id} started")
 
         # 2. Start DB writer
-        self._db_writer = DatabaseWriter(config.DB_PATH)
+        self._db_writer = DatabaseWriter(self._db_path)
         self._db_writer.start()
 
         # 3. Start listeners
@@ -144,7 +150,7 @@ class Recorder:
             self._recording_session.total_keystrokes = self._processor.keystroke_count
 
             import sqlite3
-            conn = sqlite3.connect(str(config.DB_PATH))
+            conn = sqlite3.connect(str(self._db_path))
             self._recording_session.write_end(conn)
             conn.commit()
             conn.close()
