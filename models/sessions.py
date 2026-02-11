@@ -31,7 +31,13 @@ class MovementSession:
     """
     Complete mouse movement from first move to end event.
     Contains the full path (list of PathPoints) plus summary metrics.
+
+    movement_id is app-generated: session_num * 1_000_000 + seq.
+    This makes IDs globally unique across DB files and allows the
+    processor to link clicks/scrolls to their preceding movement
+    without waiting for DB auto-increment.
     """
+    movement_id: int            # App-generated: session * 1_000_000 + seq
     start_x: int
     start_y: int
     end_x: int
@@ -51,20 +57,20 @@ class MovementSession:
         cur = conn.cursor()
         cur.execute(
             """INSERT INTO movements
-               (start_x, start_y, end_x, end_y, end_event, duration_ms,
+               (id, start_x, start_y, end_x, end_y, end_event, duration_ms,
                 distance_px, path_length_px, point_count, hour_of_day,
                 day_of_week, recording_session_id, timestamp)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (self.start_x, self.start_y, self.end_x, self.end_y,
-             self.end_event, self.duration_ms, self.distance_px,
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (self.movement_id, self.start_x, self.start_y, self.end_x,
+             self.end_y, self.end_event, self.duration_ms, self.distance_px,
              self.path_length_px, self.point_count, self.hour_of_day,
              self.day_of_week, self.recording_session_id, self.timestamp)
         )
-        mov_id = cur.lastrowid
         if self.path_points:
             cur.executemany(
                 "INSERT INTO path_points (movement_id, seq, x, y, t_ns) VALUES (?,?,?,?,?)",
-                [(mov_id, i, p.x, p.y, p.t_ns) for i, p in enumerate(self.path_points)]
+                [(self.movement_id, i, p.x, p.y, p.t_ns)
+                 for i, p in enumerate(self.path_points)]
             )
 
 

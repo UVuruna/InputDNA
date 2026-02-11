@@ -31,12 +31,18 @@ class MouseSessionDetector:
 
     Call process_move/process_click/process_scroll as events arrive.
     When a session completes, calls on_session_complete callback.
+
+    Movement IDs are app-generated: session_num * 1_000_000 + seq.
     """
 
     def __init__(self, on_session_complete: Callable[[MovementSession], None],
                  recording_session_id: int = 0):
         self._on_complete = on_session_complete
         self._recording_session_id = recording_session_id
+
+        # Movement ID generation: session * 1_000_000 + seq
+        self._session_num = recording_session_id
+        self._movement_seq = 0
 
         # Current session state
         self._points: list[PathPoint] = []
@@ -53,6 +59,11 @@ class MouseSessionDetector:
     def last_move_t_ns(self) -> int:
         """Timestamp of last mouse move (for idle timeout checking)."""
         return self._last_move_t_ns
+
+    @property
+    def last_completed_movement_id(self) -> Optional[int]:
+        """ID of the most recently completed movement session."""
+        return self._last_completed_movement_id
 
     def process_move(self, event: RawMouseMove):
         """Process a mouse move event."""
@@ -137,7 +148,12 @@ class MouseSessionDetector:
         duration = ns_to_ms(end.t_ns - start.t_ns)
         now = datetime.now()
 
+        # Generate app-controlled movement ID: session * 1_000_000 + seq
+        self._movement_seq += 1
+        movement_id = self._session_num * 1_000_000 + self._movement_seq
+
         session = MovementSession(
+            movement_id=movement_id,
             start_x=start.x,
             start_y=start.y,
             end_x=end.x,
@@ -154,4 +170,5 @@ class MouseSessionDetector:
             timestamp=now.isoformat(),
         )
 
+        self._last_completed_movement_id = movement_id
         self._on_complete(session)

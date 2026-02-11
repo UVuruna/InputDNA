@@ -128,7 +128,7 @@ class EventProcessor:
             direction = "up" if event.dy > 0 else "down" if event.dy < 0 else \
                         "right" if event.dx > 0 else "left"
             self._db.put(ScrollEvent(
-                movement_id=None,
+                movement_id=self._mouse_session.last_completed_movement_id,
                 direction=direction,
                 delta=event.dy if event.dy != 0 else event.dx,
                 x=event.x,
@@ -151,6 +151,7 @@ class EventProcessor:
 
     def _on_click_sequence(self, seq: ClickSequence):
         self.click_count += seq.click_count
+        seq.movement_id = self._mouse_session.last_completed_movement_id
         self._db.put(seq)
 
     def _on_drag(self, drag: DragRecord):

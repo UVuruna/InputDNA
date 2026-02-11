@@ -39,7 +39,7 @@ _SCHEMA = """
 -- ══════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS movements (
-    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    id                   INTEGER PRIMARY KEY,
     start_x              INTEGER NOT NULL,
     start_y              INTEGER NOT NULL,
     end_x                INTEGER NOT NULL,
