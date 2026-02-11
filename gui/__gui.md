@@ -10,6 +10,9 @@ PySide6 desktop GUI for the Human Input Recorder.
 📁 gui/
   📝 __gui.md
   🐍 __init__.py
+  🐍 calibration_dialog.py
+  🐍 dpi_dialog.py
+  🐍 export_utils.py
   🐍 login_screen.py
   🐍 main_dashboard.py
   🐍 settings_screen.py
@@ -159,6 +162,27 @@ to a `user_id`. Functions: `save_setting()`, `save_settings()`,
 `load_settings()`, `load_setting()`, `delete_settings()`.
 
 Settings keys follow `category.name` convention (e.g. `recording.downsample_hz`).
+
+### `calibration_dialog.py` — Click Speed Calibration
+
+Modal dialog: user clicks a button 20 times as fast as possible.
+Measures inter-click intervals, discards first gap (reaction time),
+calculates 95th percentile as the user's click threshold. Shows
+Windows system double-click time as reference. Saves result to
+`recording.click_sequence_gap_ms` in user settings.
+
+### `dpi_dialog.py` — DPI Measurement
+
+Modal dialog: user enters a known physical distance (cm), then
+drags the mouse across that distance on screen. Calculates DPI
+from pixel delta and physical distance, accounting for HiDPI
+scaling. Alternative to manual DPI entry in settings.
+
+### `export_utils.py` — Data Export Utilities
+
+Functions for copying user's recording database files to an
+external location. Finds all `.db` files in the user's data
+folder (active + rotated archives) and copies them with `shutil.copy2`.
 
 <a id="relationship-to-ui"></a>
 

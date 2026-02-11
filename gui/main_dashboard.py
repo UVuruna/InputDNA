@@ -11,11 +11,12 @@ Shows current user info, recording stats, and model status.
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGroupBox, QGridLayout, QMessageBox, QProgressBar,
+    QGroupBox, QGridLayout, QMessageBox, QProgressBar, QFileDialog,
 )
 from PySide6.QtCore import Signal, Qt, QTimer
 
 from gui.user_db import UserProfile
+from gui.export_utils import export_all_user_data, get_user_db_files
 
 
 class MainDashboard(QWidget):
@@ -104,6 +105,12 @@ class MainDashboard(QWidget):
         self._validate_btn.setMinimumHeight(60)
         self._validate_btn.clicked.connect(self._on_validate)
         actions_layout.addWidget(self._validate_btn)
+
+        # Export button
+        self._export_btn = QPushButton("Export Data")
+        self._export_btn.setMinimumHeight(60)
+        self._export_btn.clicked.connect(self._on_export)
+        actions_layout.addWidget(self._export_btn)
 
         layout.addWidget(actions_group)
 
@@ -262,6 +269,38 @@ class MainDashboard(QWidget):
         self.movement_count = movements
         self.click_count = clicks
         self.keystroke_count = keystrokes
+
+    def _on_export(self):
+        """Export user's recording database files."""
+        files = get_user_db_files(self._user.id)
+        if not files:
+            QMessageBox.information(
+                self, "Export Data",
+                "No recording data found yet.\nStart recording first."
+            )
+            return
+
+        total_size_mb = sum(f.stat().st_size for f in files) / 1024 / 1024
+        dest = QFileDialog.getExistingDirectory(
+            self, "Choose Export Destination",
+            "",
+            QFileDialog.ShowDirsOnly,
+        )
+        if not dest:
+            return
+
+        from pathlib import Path
+        success, total = export_all_user_data(self._user.id, Path(dest))
+        if success == total:
+            QMessageBox.information(
+                self, "Export Complete",
+                f"Exported {success} file(s) ({total_size_mb:.1f} MB) to:\n{dest}"
+            )
+        else:
+            QMessageBox.warning(
+                self, "Export Partial",
+                f"Exported {success}/{total} files.\nCheck logs for details."
+            )
 
     def update_system_info(self, state: dict[str, str], polling_hz: int | None = None):
         """
