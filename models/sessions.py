@@ -169,9 +169,11 @@ class ScrollEvent:
 class KeystrokeRecord:
     """One complete key press (down + up) with duration."""
     scan_code: int
+    vkey: int                   # Virtual key code (layout-dependent)
     key_name: str               # For human readability only
     press_duration_ms: float
     modifier_state: str         # JSON string
+    active_layout: str          # Keyboard layout ID at time of press
     hand: str                   # "left", "right", "unknown"
     finger: str                 # "pinky", "ring", "middle", "index", "thumb", "unknown"
     t_ns: int
@@ -180,11 +182,11 @@ class KeystrokeRecord:
     def write_to_db(self, conn):
         conn.execute(
             """INSERT INTO keystrokes
-               (scan_code, key_name, press_duration_ms, modifier_state,
-                hand, finger, t_ns, timestamp)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (self.scan_code, self.key_name, self.press_duration_ms,
-             self.modifier_state, self.hand, self.finger,
+               (scan_code, vkey, key_name, press_duration_ms, modifier_state,
+                active_layout, hand, finger, t_ns, timestamp)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (self.scan_code, self.vkey, self.key_name, self.press_duration_ms,
+             self.modifier_state, self.active_layout, self.hand, self.finger,
              self.t_ns, self.timestamp)
         )
 
@@ -237,6 +239,26 @@ class ShortcutRecord:
              self.main_key_name, self.modifier_to_main_ms, self.main_hold_ms,
              self.overlap_ms, self.total_ms, self.release_order,
              self.t_ns, self.timestamp)
+        )
+
+
+# ─────────────────────────────────────────────────────────────
+# SYSTEM EVENTS
+# ─────────────────────────────────────────────────────────────
+
+@dataclass(slots=True)
+class SystemEventRecord:
+    """Tracks a system state change (mouse speed, resolution, layout, etc.)."""
+    key: str        # e.g. "mouse_speed", "screen_resolution", "mouse_acceleration"
+    value: str
+    t_ns: int
+    timestamp: str
+
+    def write_to_db(self, conn):
+        conn.execute(
+            """INSERT INTO system_events (key, value, t_ns, timestamp)
+               VALUES (?,?,?,?)""",
+            (self.key, self.value, self.t_ns, self.timestamp)
         )
 
 

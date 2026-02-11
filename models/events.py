@@ -46,9 +46,11 @@ class RawMouseScroll:
 class RawKeyPress:
     """Keyboard key pressed down."""
     scan_code: int          # Physical key position (layout-independent)
+    vkey: int               # Virtual key code (layout-dependent)
     key_name: str           # Human-readable name (for DB readability only)
     t_ns: int
     modifier_state: dict    # {"ctrl": bool, "alt": bool, "shift": bool, "win": bool}
+    active_layout: str      # Keyboard layout ID at time of press
 
 @dataclass(slots=True)
 class RawKeyRelease:

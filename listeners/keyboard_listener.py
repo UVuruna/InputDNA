@@ -40,6 +40,17 @@ _MODIFIER_SCANS = {
 }
 
 
+def _get_active_layout() -> str:
+    """
+    Get the active keyboard layout for the foreground window.
+    Returns layout ID as hex string (e.g. "0x04090409" for US English).
+    """
+    hwnd = _user32.GetForegroundWindow()
+    thread_id = _user32.GetWindowThreadProcessId(hwnd, None)
+    layout_id = _user32.GetKeyboardLayout(thread_id)
+    return hex(layout_id & 0xFFFFFFFF)
+
+
 def _vk_to_scan(vk: int) -> int:
     """
     Convert virtual key code to scan code using Windows API.
@@ -171,9 +182,11 @@ class KeyboardListener:
 
         self._queue.put(RawKeyPress(
             scan_code=scan,
+            vkey=vk,
             key_name=name,
             t_ns=t,
             modifier_state=self._modifier_state.copy(),
+            active_layout=_get_active_layout(),
         ))
 
     def _on_release(self, key):

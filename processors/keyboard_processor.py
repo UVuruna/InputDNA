@@ -86,6 +86,10 @@ class KeyboardProcessor:
         self._last_key_name: Optional[str] = None
         self._last_press_t_ns: Optional[int] = None
 
+        # Press context: stores (vkey, active_layout, modifier_state_json)
+        # from press events, keyed by scan code, used on release
+        self._press_context: dict[int, tuple[int, str, str]] = {}
+
         # Shortcut tracking
         self._active_modifiers: dict[int, int] = {}  # scan → press t_ns
         self._shortcut_main_scan: Optional[int] = None
@@ -96,6 +100,13 @@ class KeyboardProcessor:
         """Process a key press event."""
         scan = event.scan_code
         is_mod = scan in _MODIFIER_SCANS
+
+        # Store press context for use on release
+        self._press_context[scan] = (
+            event.vkey,
+            event.active_layout,
+            json.dumps(event.modifier_state),
+        )
 
         if is_mod:
             # Track modifier press time for shortcut timing
@@ -131,12 +142,17 @@ class KeyboardProcessor:
         scan = event.scan_code
         is_mod = scan in _MODIFIER_SCANS
 
+        # Retrieve press context (vkey, layout, modifiers stored on press)
+        vkey, active_layout, modifier_json = self._press_context.pop(scan, (0, "", "{}"))
+
         # Emit keystroke record for every key release
         self._on_keystroke(KeystrokeRecord(
             scan_code=scan,
+            vkey=vkey,
             key_name=event.key_name,
             press_duration_ms=event.press_duration_ms,
-            modifier_state="{}",  # Could be enriched if needed
+            modifier_state=modifier_json,
+            active_layout=active_layout,
             hand=infer_hand(scan),
             finger=infer_finger(scan),
             t_ns=event.t_ns,
