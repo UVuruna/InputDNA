@@ -138,12 +138,15 @@ class MouseSessionDetector:
         if distance < config.MIN_SESSION_DISTANCE_PX:
             return
 
-        # Path length (sum of segments)
+        # Path length (sum of segments) — always from ALL points
         path_len = 0.0
         for i in range(1, len(points)):
             sdx = points[i].x - points[i - 1].x
             sdy = points[i].y - points[i - 1].y
             path_len += math.sqrt(sdx * sdx + sdy * sdy)
+
+        # Downsample path points if configured
+        stored_points = self._downsample(points)
 
         duration = ns_to_ms(end.t_ns - start.t_ns)
         now = datetime.now()
@@ -162,8 +165,8 @@ class MouseSessionDetector:
             duration_ms=duration,
             distance_px=distance,
             path_length_px=path_len,
-            point_count=len(points),
-            path_points=points,
+            point_count=len(stored_points),
+            path_points=stored_points,
             hour_of_day=now.hour,
             day_of_week=now.weekday(),
             recording_session_id=self._recording_session_id,
@@ -172,3 +175,29 @@ class MouseSessionDetector:
 
         self._last_completed_movement_id = movement_id
         self._on_complete(session)
+
+    @staticmethod
+    def _downsample(points: list[PathPoint]) -> list[PathPoint]:
+        """
+        Reduce path points to target sampling rate.
+
+        Keeps first and last point always. Intermediate points are kept
+        only if enough time has passed since the last kept point.
+        Returns original list if downsampling is disabled (DOWNSAMPLE_HZ=0).
+        """
+        if config.DOWNSAMPLE_HZ == 0 or len(points) <= 2:
+            return points
+
+        # Minimum nanoseconds between stored points
+        min_interval_ns = 1_000_000_000 // config.DOWNSAMPLE_HZ
+
+        sampled = [points[0]]
+        last_kept_t = points[0].t_ns
+
+        for p in points[1:-1]:
+            if p.t_ns - last_kept_t >= min_interval_ns:
+                sampled.append(p)
+                last_kept_t = p.t_ns
+
+        sampled.append(points[-1])
+        return sampled

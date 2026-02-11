@@ -28,6 +28,27 @@ LOG_DIR = DATA_DIR / "logs"
 DB_PATH = DB_DIR / "movements.db"
 
 # ─────────────────────────────────────────────────────────────
+# PATH POINT SAMPLING
+# ─────────────────────────────────────────────────────────────
+# Target sampling rate for path points stored in the database.
+# If your mouse polls at a higher rate, intermediate points are
+# skipped to reduce DB size. First and last points are always kept.
+#
+# Valid values: 125, 250, 500, 1000, 2000, 4000, 8000
+# Set to 0 to disable downsampling (store every point).
+#
+# Example: mouse at 1000 Hz + DOWNSAMPLE_HZ=250 → store every 4th point
+# DB size reduction: ~4x for path_points (the largest table).
+DOWNSAMPLE_HZ = 0
+_VALID_DOWNSAMPLE_RATES = {0, 125, 250, 500, 1000, 2000, 4000, 8000}
+
+if DOWNSAMPLE_HZ not in _VALID_DOWNSAMPLE_RATES:
+    raise ValueError(
+        f"DOWNSAMPLE_HZ={DOWNSAMPLE_HZ} is not valid. "
+        f"Must be one of: {sorted(_VALID_DOWNSAMPLE_RATES)}"
+    )
+
+# ─────────────────────────────────────────────────────────────
 # MOUSE SESSION DETECTION
 # ─────────────────────────────────────────────────────────────
 # After this many ms with no mouse movement, the current movement
