@@ -55,6 +55,16 @@ BATCH_SIZE = 100
 FLUSH_INTERVAL_S = 2.0
 
 # ─────────────────────────────────────────────────────────────
+# SYSTEM MONITOR
+# ─────────────────────────────────────────────────────────────
+# How often to check for system state changes (mouse speed,
+# acceleration, screen resolution, keyboard layout).
+SYSTEM_MONITOR_INTERVAL_S = 10.0
+
+# Number of mouse move events to sample for polling rate estimation.
+POLLING_RATE_SAMPLE_COUNT = 500
+
+# ─────────────────────────────────────────────────────────────
 # HOTKEY
 # ─────────────────────────────────────────────────────────────
 # Global hotkey to pause/resume recording.
