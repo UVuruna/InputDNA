@@ -31,6 +31,10 @@ Routes raw events from the shared queue to the correct sub-processor.
 Runs in a dedicated thread. Also periodically checks idle/sequence
 timeouts on sub-processors.
 
+**Cross-record linking:** Sets `movement_id` on `ClickSequence` and `ScrollEvent`
+records to the last completed movement's app-generated ID. When drag is first
+confirmed, explicitly ends any active movement session (`end_for_drag()`).
+
 ### `mouse_session.py` — Movement Session Detector
 
 Groups consecutive `RawMouseMove` events into movement sessions. A session
@@ -42,6 +46,7 @@ starts when the mouse first moves after being idle, and ends when:
 | Right click | `"right_click"` |
 | Middle click | `"middle_click"` |
 | Scroll | `"scroll_up"`, `"scroll_down"`, etc. |
+| Drag begins | `"drag"` |
 | Idle timeout | `"idle"` |
 | Shutdown | `"flush"` |
 
@@ -56,6 +61,14 @@ stateDiagram-v2
 ```
 
 Calculates basic metrics: duration, distance, path length, point count.
+
+**Movement ID generation:** Each session gets an app-generated ID
+(`session_num * 1_000_000 + seq`) that is known before DB write. This enables
+clicks and scrolls to reference their preceding movement immediately.
+
+**Downsampling:** When `DOWNSAMPLE_HZ` is set in config, intermediate path points
+are filtered by time interval. First and last points always kept. Path length is
+calculated from ALL raw points (full accuracy) before downsampling.
 
 > **Note:** Does NOT calculate derived analytics (overshoot, speed profiles, curvature).
 > Those are post-processing tasks.
@@ -93,7 +106,7 @@ Processes keyboard events to produce three record types:
 |-------------|------------------|
 | `KeystrokeRecord` | Individual key press: scan code, duration, hand/finger |
 | `KeyTransitionRecord` | Delay between consecutive keys (scan code pairs) |
-| `ShortcutRecord` | Modifier+key combo with full timing profile |
+| `ShortcutRecord` | Modifier+key combo with full timing profile, actual release order |
 
 **Typing mode detection:**
 

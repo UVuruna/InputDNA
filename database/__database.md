@@ -12,6 +12,7 @@ SQLite database layer. Handles schema creation and batched writing.
   🐍 __init__.py
   🐍 schema.py
   🐍 writer.py
+  🐍 rotation.py
 ```
 
 <a id="files"></a>
@@ -41,6 +42,11 @@ uses `IF NOT EXISTS`.
 | `recording_sessions` | Meta | Recording periods (start/end/counts) |
 | `system_events` | System | Tracks changes to system state (mouse speed, layout, resolution, etc.) |
 | `metadata` | Meta | Static key-value config/stats |
+
+**Key schema details:**
+
+- `movements.id` is **app-generated** (not AUTOINCREMENT): format `session * 1_000_000 + seq`. This allows the processor to know the ID before DB write and link clicks/scrolls to their preceding movement.
+- `path_points` and `drag_points` use **delta encoding**: seq=0 is absolute, seq>0 stores deltas from previous point. Metadata key `path_encoding=delta_v1` signals this to readers.
 
 **SQLite pragmas applied:**
 
@@ -92,3 +98,17 @@ flowchart LR
 | `perf_counter_ns` in `t_ns` columns | Maximum precision timestamps (integer nanoseconds) |
 | Wall clock in `timestamp` columns | Human readability only — never used for calculations |
 | No indexes by default | Added later during ML prep phase if needed (INSERT-heavy workload) |
+| Delta-encoded paths | Smaller integers → fewer bytes in SQLite varint encoding (~30% savings) |
+| App-generated movement IDs | Processor knows ID before write → can link clicks/scrolls immediately |
+
+### `rotation.py` — DB File Rotation
+
+Archives the active DB when it exceeds `DB_ROTATION_MAX_BYTES` (default 5 GB).
+Called once at session start. If rotation triggers:
+
+1. Active DB renamed with timestamp suffix (e.g., `movements_20260211_143022.db`)
+2. WAL and SHM files also renamed
+3. Old DB VACUUMed in a background daemon thread
+4. Fresh DB created at the original path
+
+ML/post-processing discovers all DB files via `glob("db/*.db")`.

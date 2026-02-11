@@ -56,7 +56,7 @@ into the correct table(s).
 
 | Class | DB Table(s) | Description |
 |-------|-------------|-------------|
-| `MovementSession` | `movements` + `path_points` | Complete movement with full path |
+| `MovementSession` | `movements` + `path_points` | Complete movement with full path, app-generated `movement_id` |
 | `SingleClick` | — (embedded in ClickSequence) | One click within a sequence |
 | `ClickSequence` | `click_sequences` + `click_details` | Group of clicks (1, 2, 3+) |
 | `DragRecord` | `drags` + `drag_points` | Click-hold-move-release |
@@ -89,5 +89,12 @@ flowchart LR
     W -- "write_to_db()" --> DB[(SQLite)]
 ```
 
+**Shared helpers:**
+
+| Function | Description |
+|----------|-------------|
+| `_delta_encode_points()` | Converts a list of PathPoints to delta-encoded tuples for DB storage (seq=0 absolute, seq>0 deltas) |
+
 > **Note:** Raw events are lightweight and short-lived (queue transit only).
 > Processed records are richer and persist to disk via `write_to_db()`.
+> Path points use delta encoding — see metadata key `path_encoding=delta_v1`.
