@@ -1,25 +1,36 @@
+<p align="center">
+  <img src="support/logo/Uncanny Valley.svg" alt="Uncanny Valley" width="300">
+</p>
+
 # Uncanny Valley
 
 **Uncanny Valley** is a suite of AI projects that learn and replicate individual human behavior across different domains — input, speech, gaming, and more. Each sub-project builds a personal behavioral model so faithful that the output crosses the uncanny valley, becoming indistinguishable from the real person.
 
 ### Sub-Projects
 
-```mermaid
-flowchart TB
-    UV["Uncanny Valley"]
-    UV --> DNA["InputDNA — Mouse & keyboard behavior"]
-    UV --> SPEECH["Speech & voice patterns (future)"]
-    UV --> GAMER["Gaming behavior (future)"]
-    UV --> MORE["... (future)"]
-```
-
-| Sub-Project | Domain | Status |
-|-------------|--------|--------|
-| **InputDNA** | Mouse movement, keyboard typing, click behavior | Active |
-| Speech | Voice patterns, speech rhythm, intonation | Planned |
-| Gamer | Gaming input patterns, reaction times, strategies | Planned |
+<table>
+  <tr>
+    <td align="center" width="200"><img src="support/logo/InputDNA.svg" alt="InputDNA" width="100"><br><b>InputDNA</b></td>
+    <td>Mouse movement, keyboard typing, click behavior</td>
+    <td><b>Active</b></td>
+  </tr>
+  <tr>
+    <td align="center" width="200"><img src="support/logo/VoiceDNA.svg" alt="VoiceDNA" width="100"><br><b>VoiceDNA</b></td>
+    <td>Voice patterns, speech rhythm, intonation</td>
+    <td>Planned</td>
+  </tr>
+  <tr>
+    <td align="center" width="200"><img src="support/logo/GamingDNA.svg" alt="GamingDNA" width="100"><br><b>GamingDNA</b></td>
+    <td>Gaming input patterns, reaction times, strategies</td>
+    <td>Planned</td>
+  </tr>
+</table>
 
 ---
+
+<p align="center">
+  <img src="support/logo/InputDNA.svg" alt="InputDNA" width="200">
+</p>
 
 # InputDNA
 

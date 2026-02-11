@@ -1,10 +1,10 @@
 """
 System tray icon for recording status.
 
-Shows a colored circle in the taskbar notification area:
-  Green  = recording
-  Yellow = paused
-  Red    = stopped/error
+Shows custom InputDNA logos in the taskbar notification area:
+  InputDNA-working.png  = recording
+  InputDNA-paused.png   = paused
+  InputDNA-stopped.png  = stopped / error
 
 Right-click menu: Pause/Resume, Stats, Quit.
 
@@ -13,32 +13,26 @@ platforms, so TrayIcon.run() is a blocking call.
 """
 
 import logging
+from pathlib import Path
 from typing import Callable, Optional
-from PIL import Image, ImageDraw
+from PIL import Image
 import pystray
 
 logger = logging.getLogger(__name__)
 
-# Icon size in pixels
-_ICON_SIZE = 64
+_UI_DIR = Path(__file__).parent
 
 
-def _make_icon(color: str) -> Image.Image:
-    """Create a simple filled circle icon."""
-    img = Image.new("RGBA", (_ICON_SIZE, _ICON_SIZE), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    margin = 4
-    draw.ellipse(
-        [margin, margin, _ICON_SIZE - margin, _ICON_SIZE - margin],
-        fill=color,
-    )
-    return img
+def _load_icon(filename: str) -> Image.Image:
+    """Load a PNG icon from the ui/ directory."""
+    path = _UI_DIR / filename
+    return Image.open(path)
 
 
-# Pre-render icons
-_ICON_RECORDING = _make_icon("#22c55e")  # Green
-_ICON_PAUSED = _make_icon("#eab308")     # Yellow
-_ICON_STOPPED = _make_icon("#ef4444")    # Red
+# Pre-load icons
+_ICON_RECORDING = _load_icon("InputDNA-working.png")
+_ICON_PAUSED = _load_icon("InputDNA-paused.png")
+_ICON_STOPPED = _load_icon("InputDNA-stopped.png")
 
 
 class TrayIcon:
