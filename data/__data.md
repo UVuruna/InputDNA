@@ -10,7 +10,7 @@ the database is created automatically on first run.
 
 ```
 📁 data/
-  📝 README.md
+  📝 __data.md
   🗄️ movements.db          ← created at runtime (gitignored)
   📄 movements.db-wal      ← SQLite WAL file (gitignored)
   📄 movements.db-shm      ← SQLite shared memory (gitignored)

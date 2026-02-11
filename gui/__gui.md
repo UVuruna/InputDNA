@@ -8,7 +8,7 @@ PySide6 desktop GUI for the Human Input Recorder.
 
 ```
 📁 gui/
-  📝 README.md
+  📝 __gui.md
   🐍 __init__.py
   🐍 login_screen.py
   🐍 main_dashboard.py

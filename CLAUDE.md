@@ -32,15 +32,15 @@ Phase 4: Replay Engine (Future)
 - [README.md](README.md) — Project overview, document index, quick start
 - [docs/](docs/) — 7 detailed specification documents (mouse, keyboard, ML, replay, etc.)
 
-**Folder READMEs (MUST READ before modifying a module):**
-- [database/README.md](database/README.md) — Schema, writer, WAL mode
-- [listeners/README.md](listeners/README.md) — Mouse & keyboard hooks, scan codes
-- [processors/README.md](processors/README.md) — Session detection, click grouping, keyboard processing
-- [models/README.md](models/README.md) — Raw events vs processed records
-- [utils/README.md](utils/README.md) — Timing, keyboard layout, hotkeys
-- [ui/README.md](ui/README.md) — System tray icon
-- [gui/README.md](gui/README.md) — PySide6 desktop GUI (login, dashboard, validation)
-- [data/README.md](data/README.md) — Runtime database location
+**Folder Docs (MUST READ before modifying a module):**
+- [database/__database.md](database/__database.md) — Schema, writer, WAL mode
+- [listeners/__listeners.md](listeners/__listeners.md) — Mouse & keyboard hooks, scan codes
+- [processors/__processors.md](processors/__processors.md) — Session detection, click grouping, keyboard processing
+- [models/__models.md](models/__models.md) — Raw events vs processed records
+- [utils/__utils.md](utils/__utils.md) — Timing, keyboard layout, hotkeys
+- [ui/__ui.md](ui/__ui.md) — System tray icon
+- [gui/__gui.md](gui/__gui.md) — PySide6 desktop GUI (login, dashboard, validation)
+- [data/__data.md](data/__data.md) — Runtime database location
 
 ---
 
@@ -80,7 +80,7 @@ Before writing ANY code or making ANY changes:
 
 1. **Read the task carefully** — Understand what is being asked
 2. **Identify ambiguities** — What is unclear? What could be interpreted multiple ways?
-3. **Read relevant README.md files** — Check documentation of the module you'll modify
+3. **Read relevant `__folder.md` files** — Check documentation of the module you'll modify
 4. **Read implementation-plan.md** if architectural context is needed
 5. **Ask questions** — NEVER assume, ALWAYS verify:
    - "Should I modify existing file X or create new one?"
@@ -97,7 +97,7 @@ User: "Fix the session detection"
 
 ✅ CORRECT: "Before I start, let me clarify:
    1. Which specific behavior is wrong — idle timeout, click ending, or something else?
-   2. Let me read processors/README.md and mouse_session.py first.
+   2. Let me read processors/__processors.md and mouse_session.py first.
    3. Should the fix also update the implementation plan?"
    [waits for answers]
 ```
@@ -196,28 +196,39 @@ class BaseTimeoutProcessor:
 
 #### Rule #5: Documentation-Driven Development
 
-**Every folder has its README.md. Read it before modifying, update it after.**
+**Every folder has its `__folder.md` doc. Read it before modifying, update it after.**
+
+**Naming convention:** `__{folder_name}.md` — double underscore prefix + folder name.
+
+| Folder | Doc file |
+|--------|----------|
+| `database/` | `__database.md` |
+| `listeners/` | `__listeners.md` |
+| `gui/` | `__gui.md` |
+| (new folder) | `__{name}.md` |
+
+> **Note:** Root `README.md` stays as `README.md`. Only folder-level docs use the `__` prefix.
 
 **Folder structure:**
 ```
 database/
-├── README.md          ← Read this FIRST
+├── __database.md      ← Read this FIRST
 ├── __init__.py
 ├── schema.py
 └── writer.py
 ```
 
 **Before creating a new file:**
-1. Read the folder's README.md
+1. Read the folder's `__folder.md`
 2. Understand existing patterns
 3. Create the file
-4. Update README.md with the new file's description
+4. Update `__folder.md` with the new file's description
 
 **Before modifying an existing file:**
-1. Read its folder's README.md
-2. If changing functionality, update README.md after
+1. Read its folder's `__folder.md`
+2. If changing functionality, update `__folder.md` after
 
-**README.md structure for each folder:**
+**`__folder.md` structure for each folder:**
 ```markdown
 # folder_name/
 
@@ -663,14 +674,14 @@ The same physical key always has the same scan code regardless of language layou
 
 ### Before Working on Any Module
 
-1. **Read the module's README.md**
+1. **Read the module's `__folder.md`**
 2. **Check implementation-plan.md** if architectural context is needed
 3. **Read the actual source files** you'll modify
 4. **ASK** if documentation is missing or unclear
 
 ### After Completing Work
 
-1. **Update the module's README.md** if functionality changed
+1. **Update the module's `__folder.md`** if functionality changed
 2. **Verify no duplicates** introduced
 3. **Check dependent modules** — did change break anything?
 4. **Update implementation-plan.md** if architecture changed
@@ -685,7 +696,7 @@ The same physical key always has the same scan code regardless of language layou
 4. **Batch everything** — Single DatabaseWriter, no direct DB access
 5. **Scan codes for timing** — Physical position, not characters
 6. **Integer nanoseconds** — `perf_counter_ns`, never floats
-7. **Read README.md first** — Every folder has documentation
+7. **Read `__folder.md` first** — Every folder has documentation
 8. **No duplicate code** — Use base classes, shared utilities
 9. **Update docs after changes** — Documentation-driven development
 10. **When unsure → ASK** — Better 100 questions than 1 bug

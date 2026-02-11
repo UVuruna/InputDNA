@@ -9,7 +9,7 @@ plain Python dataclasses that define the shape of data flowing through the syste
 
 ```
 📁 models/
-  📝 README.md
+  📝 __models.md
   🐍 __init__.py
   🐍 events.py
   🐍 sessions.py

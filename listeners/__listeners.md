@@ -12,7 +12,7 @@ attach a precise timestamp, and push to the queue. No analysis, no filtering.
 
 ```
 📁 listeners/
-  📝 README.md
+  📝 __listeners.md
   🐍 __init__.py
   🐍 mouse_listener.py
   🐍 keyboard_listener.py

@@ -9,7 +9,7 @@ functions with no state — any module can import and use them freely.
 
 ```
 📁 utils/
-  📝 README.md
+  📝 __utils.md
   🐍 __init__.py
   🐍 timing.py
   🐍 keyboard_layout.py

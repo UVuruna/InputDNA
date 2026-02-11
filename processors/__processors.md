@@ -13,7 +13,7 @@ sub-processor based on event type.
 
 ```
 📁 processors/
-  📝 README.md
+  📝 __processors.md
   🐍 __init__.py            ← EventProcessor (central dispatcher)
   🐍 mouse_session.py
   🐍 click_processor.py

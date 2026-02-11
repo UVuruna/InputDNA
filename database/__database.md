@@ -8,7 +8,7 @@ SQLite database layer. Handles schema creation and batched writing.
 
 ```
 📁 database/
-  📝 README.md
+  📝 __database.md
   🐍 __init__.py
   🐍 schema.py
   🐍 writer.py

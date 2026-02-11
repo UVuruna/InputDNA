@@ -10,7 +10,7 @@ background with just a tray icon.
 
 ```
 📁 ui/
-  📝 README.md
+  📝 __ui.md
   🐍 __init__.py
   🐍 tray_icon.py
   🖼️ InputDNA-working.png

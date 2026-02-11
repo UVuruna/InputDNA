@@ -66,6 +66,7 @@ flowchart LR
 ## Table of Contents
 
 - [Project Structure](#project-structure)
+- [Folder Documentation](#folder-documentation)
 - [Specification Documents](#specification-documents)
 - [Quick Start](#quick-start)
 - [Requirements](#requirements)
@@ -124,8 +125,28 @@ InputDNA/
     07-technical-conclusions.md
 ```
 
-> **Note:** Every folder contains a `README.md` with detailed documentation of its files,
+> **Note:** Every folder contains a `__folder.md` doc with detailed documentation of its files,
 > design decisions, and data flow diagrams.
+
+---
+
+<a id="folder-documentation"></a>
+
+## Folder Documentation
+
+Each module folder has its own documentation file (`__folder.md`):
+
+| Folder | Documentation | Description |
+|--------|---------------|-------------|
+| `database/` | [`__database.md`](database/__database.md) | SQLite schema, batched writer, WAL mode |
+| `listeners/` | [`__listeners.md`](listeners/__listeners.md) | Mouse & keyboard OS hooks, scan codes |
+| `processors/` | [`__processors.md`](processors/__processors.md) | Session detection, click grouping, keyboard processing |
+| `models/` | [`__models.md`](models/__models.md) | Raw events & processed records (dataclasses) |
+| `utils/` | [`__utils.md`](utils/__utils.md) | Timing, keyboard layout, hotkeys |
+| `ui/` | [`__ui.md`](ui/__ui.md) | System tray icon (pystray) |
+| `gui/` | [`__gui.md`](gui/__gui.md) | PySide6 desktop GUI (login, dashboard, validation) |
+| `data/` | [`__data.md`](data/__data.md) | Runtime database location |
+| `support/` | [`__support.md`](support/__support.md) | Design assets and branding |
 
 ---
 
@@ -139,7 +160,7 @@ All in `docs/`:
 |---|----------|-------------|
 | 1 | [Mouse Movement Recorder](docs/01-mouse-movement-recorder.md) | Core recording spec, database schema, metrics |
 | 2 | [Behavioral Adaptations](docs/02-behavioral-adaptations.md) | WHY we capture each behavioral pattern |
-| 3 | [Keyboard Input Recorder](docs/03-keyboard-input-recorder.md) | Digraphs, shortcuts, typing modes |
+| 3 | [Keyboard Input Recorder](docs/03-keyboard-recorder.md) | Digraphs, shortcuts, typing modes |
 | 4 | [Validation & Testing](docs/04-validation-testing.md) | Shadow mode, similarity scoring, 85%+ target |
 | 5 | [ML Model Architecture](docs/05-ml-model-architecture.md) | Ensemble models, training pipeline |
 | 6 | [Replay Engine](docs/06-replay-engine.md) | MouseMux integration, precision timing |
