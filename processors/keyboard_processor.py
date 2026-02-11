@@ -95,6 +95,7 @@ class KeyboardProcessor:
         self._shortcut_main_scan: Optional[int] = None
         self._shortcut_main_t_ns: int = 0
         self._shortcut_main_name: str = ""
+        self._shortcut_main_release_t_ns: Optional[int] = None
 
     def process_press(self, event: RawKeyPress):
         """Process a key press event."""
@@ -166,10 +167,9 @@ class KeyboardProcessor:
         if is_mod:
             self._active_modifiers.pop(scan, None)
 
-        # If main key of shortcut is released, record its timing
+        # Track main key release for shortcut timing
         if scan == self._shortcut_main_scan:
-            # Main key released before modifier — note this for release order
-            pass  # Release order determined in _try_emit_shortcut
+            self._shortcut_main_release_t_ns = event.t_ns
 
     def _try_emit_shortcut(self, modifier_release: RawKeyRelease):
         """Try to emit a shortcut record when a modifier is released."""
@@ -203,11 +203,23 @@ class KeyboardProcessor:
 
         shortcut_name = "+".join(mod_names + [main_name])
         mod_to_main = ns_to_ms(main_press_t - earliest_mod_t)
-        total = ns_to_ms(modifier_release.t_ns - earliest_mod_t)
 
-        # We don't have main key release time here precisely,
-        # so overlap is approximate
-        overlap = ns_to_ms(modifier_release.t_ns - main_press_t)
+        # Determine release order and timing from tracked release events
+        main_release_t = self._shortcut_main_release_t_ns
+        mod_release_t = modifier_release.t_ns
+
+        if main_release_t is not None:
+            # Main key was released before modifier
+            release_order = "main_first"
+            main_hold = ns_to_ms(main_release_t - main_press_t)
+            overlap = ns_to_ms(main_release_t - main_press_t)
+            total = ns_to_ms(mod_release_t - earliest_mod_t)
+        else:
+            # Modifier released while main key still held
+            release_order = "modifier_first"
+            main_hold = ns_to_ms(mod_release_t - main_press_t)
+            overlap = ns_to_ms(mod_release_t - main_press_t)
+            total = ns_to_ms(mod_release_t - earliest_mod_t)
 
         self._on_shortcut(ShortcutRecord(
             shortcut_name=shortcut_name,
@@ -215,10 +227,10 @@ class KeyboardProcessor:
             main_scan=main_scan,
             main_key_name=main_name,
             modifier_to_main_ms=max(0, mod_to_main),
-            main_hold_ms=0,  # Filled more precisely in post-processing
+            main_hold_ms=max(0, main_hold),
             overlap_ms=max(0, overlap),
             total_ms=max(0, total),
-            release_order="modifier_first",  # Since modifier triggered this
+            release_order=release_order,
             t_ns=int(earliest_mod_t),
             timestamp=wall_clock_iso(),
         ))
@@ -227,3 +239,4 @@ class KeyboardProcessor:
         self._shortcut_main_scan = None
         self._shortcut_main_t_ns = 0
         self._shortcut_main_name = ""
+        self._shortcut_main_release_t_ns = None
