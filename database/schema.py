@@ -137,9 +137,11 @@ CREATE TABLE IF NOT EXISTS scrolls (
 CREATE TABLE IF NOT EXISTS keystrokes (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     scan_code         INTEGER NOT NULL,
+    vkey              INTEGER NOT NULL,
     key_name          TEXT    NOT NULL,
     press_duration_ms REAL    NOT NULL,
     modifier_state    TEXT    NOT NULL,
+    active_layout     TEXT    NOT NULL,
     hand              TEXT    NOT NULL,
     finger            TEXT    NOT NULL,
     t_ns              INTEGER NOT NULL,
@@ -192,6 +194,18 @@ CREATE TABLE IF NOT EXISTS recording_sessions (
     total_clicks           INTEGER DEFAULT 0,
     total_keystrokes       INTEGER DEFAULT 0,
     perf_counter_start_ns  INTEGER NOT NULL
+);
+
+-- ══════════════════════════════════════════════════════════
+-- SYSTEM: State Change Events
+-- ══════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS system_events (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    key       TEXT    NOT NULL,
+    value     TEXT    NOT NULL,
+    t_ns      INTEGER NOT NULL,
+    timestamp TEXT    NOT NULL
 );
 
 -- ══════════════════════════════════════════════════════════
