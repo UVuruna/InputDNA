@@ -123,6 +123,40 @@ class MainDashboard(QWidget):
 
         layout.addWidget(stats_group)
 
+        # ── System Info ──────────────────────────────────────
+        sys_group = QGroupBox("System Info")
+        sys_layout = QGridLayout(sys_group)
+        sys_layout.setSpacing(10)
+
+        info_style = "font-size: 13px; font-weight: bold; color: #e94560;"
+
+        sys_layout.addWidget(QLabel("Keyboard Layout:"), 0, 0)
+        self._layout_label = QLabel("—")
+        self._layout_label.setStyleSheet(info_style)
+        sys_layout.addWidget(self._layout_label, 0, 1)
+
+        sys_layout.addWidget(QLabel("Polling Rate:"), 0, 2)
+        self._polling_label = QLabel("—")
+        self._polling_label.setStyleSheet(info_style)
+        sys_layout.addWidget(self._polling_label, 0, 3)
+
+        sys_layout.addWidget(QLabel("Mouse Speed:"), 1, 0)
+        self._mouse_speed_label = QLabel("—")
+        self._mouse_speed_label.setStyleSheet(info_style)
+        sys_layout.addWidget(self._mouse_speed_label, 1, 1)
+
+        sys_layout.addWidget(QLabel("Acceleration:"), 1, 2)
+        self._accel_label = QLabel("—")
+        self._accel_label.setStyleSheet(info_style)
+        sys_layout.addWidget(self._accel_label, 1, 3)
+
+        sys_layout.addWidget(QLabel("Resolution:"), 2, 0)
+        self._resolution_label = QLabel("—")
+        self._resolution_label.setStyleSheet(info_style)
+        sys_layout.addWidget(self._resolution_label, 2, 1)
+
+        layout.addWidget(sys_group)
+
         # ── Model Status ───────────────────────────────────
         model_group = QGroupBox("Model Status")
         model_layout = QVBoxLayout(model_group)
@@ -222,3 +256,16 @@ class MainDashboard(QWidget):
         self.movement_count = movements
         self.click_count = clicks
         self.keystroke_count = keystrokes
+
+    def update_system_info(self, state: dict[str, str], polling_hz: int | None = None):
+        """
+        Update system info panel.
+        state: dict from SystemMonitor.current_state
+        polling_hz: estimated mouse polling rate (None if not yet estimated)
+        """
+        self._layout_label.setText(state.get("keyboard_layout", "—"))
+        self._mouse_speed_label.setText(state.get("mouse_speed", "—"))
+        accel = state.get("mouse_acceleration", "—")
+        self._accel_label.setText("On" if accel == "True" else "Off" if accel == "False" else accel)
+        self._resolution_label.setText(state.get("screen_resolution", "—"))
+        self._polling_label.setText(f"~{polling_hz} Hz" if polling_hz else "Estimating...")
