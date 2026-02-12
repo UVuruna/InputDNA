@@ -63,6 +63,19 @@ def build_pyinstaller():
             print(f"  Cleaning {d}")
             shutil.rmtree(d)
 
+    # Packages that get pulled in as transitive dependencies
+    # but are not used by InputDNA at runtime
+    exclude_modules = [
+        "numpy",
+        "setuptools",
+        "pkg_resources",
+        "charset_normalizer",
+        "unittest",
+        "xmlrpc",
+        "pydoc",
+        "tkinter",
+    ]
+
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
@@ -75,9 +88,14 @@ def build_pyinstaller():
         "--uac-admin",
         # Add data files
         "--add-data", f"{ICON_PATH};.",
-        # Entry point
-        str(ENTRY_POINT),
     ]
+
+    # Add exclude flags
+    for mod in exclude_modules:
+        cmd.extend(["--exclude-module", mod])
+
+    # Entry point (must be last)
+    cmd.append(str(ENTRY_POINT))
 
     start = time.time()
     run(cmd)

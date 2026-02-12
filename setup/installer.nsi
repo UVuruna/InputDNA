@@ -1,5 +1,7 @@
-; ──────────────────────────────────────────────────────────────
-; InputDNA Installer — NSIS Script
+﻿Unicode true
+
+; =================================================================
+; InputDNA Installer -- NSIS Script
 ;
 ; Creates a standard Windows installer:
 ;   - Choose install location (default: Program Files\InputDNA)
@@ -8,12 +10,12 @@
 ;   - Start Menu + Desktop shortcuts
 ;   - Optional autostart with Windows
 ;   - Uninstaller in Add/Remove Programs
-; ──────────────────────────────────────────────────────────────
+; =================================================================
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 
-; ── App Info ──────────────────────────────────────────────────
+; -- App Info -----------------------------------------------------
 !define APP_NAME "InputDNA"
 !define APP_PUBLISHER "UVuruna"
 !define APP_EXE "InputDNA.exe"
@@ -22,11 +24,11 @@
 ; Registry key for uninstall info
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
 
-; ── Paths (passed from build.py via /D flags) ────────────────
-; DIST_DIR — PyInstaller output (dist\InputDNA\)
-; SETUP_DIR — setup folder (for icon)
+; -- Paths (passed from build.py via /D flags) --------------------
+; DIST_DIR -- PyInstaller output (dist\InputDNA\)
+; SETUP_DIR -- setup folder (for icon)
 
-; ── General Settings ──────────────────────────────────────────
+; -- General Settings ---------------------------------------------
 Name "${APP_NAME}"
 OutFile "${DIST_DIR}\${APP_NAME}_Setup.exe"
 InstallDir "$PROGRAMFILES\${APP_NAME}"
@@ -34,18 +36,18 @@ InstallDirRegKey HKLM "${UNINST_KEY}" "InstallLocation"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 
-; ── Icon ──────────────────────────────────────────────────────
+; -- Icon ---------------------------------------------------------
 !define MUI_ICON "${SETUP_DIR}\InputDNA.ico"
 !define MUI_UNICON "${SETUP_DIR}\InputDNA.ico"
 
-; ── Interface Settings ────────────────────────────────────────
+; -- Interface Settings -------------------------------------------
 !define MUI_ABORTWARNING
 !define MUI_WELCOMEPAGE_TITLE "Welcome to ${APP_NAME} Setup"
 !define MUI_WELCOMEPAGE_TEXT "This wizard will install ${APP_NAME} on your computer.$\r$\n$\r$\n${APP_NAME} records your personal mouse and keyboard input patterns for ML training.$\r$\n$\r$\nClick Next to continue."
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch ${APP_NAME}"
 
-; ── Pages ─────────────────────────────────────────────────────
+; -- Pages --------------------------------------------------------
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_COMPONENTS
@@ -56,12 +58,12 @@ SetCompressor /SOLID lzma
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
-; ── Language ──────────────────────────────────────────────────
+; -- Language -----------------------------------------------------
 !insertmacro MUI_LANGUAGE "English"
 
-; ──────────────────────────────────────────────────────────────
+; =================================================================
 ; INSTALLER SECTIONS
-; ──────────────────────────────────────────────────────────────
+; =================================================================
 
 Section "!${APP_NAME} (required)" SecMain
     SectionIn RO  ; Cannot be deselected
@@ -111,16 +113,16 @@ Section "Start with Windows" SecAutostart
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${APP_NAME}" "$\"$INSTDIR\${APP_EXE}$\""
 SectionEnd
 
-; ── Section Descriptions ──────────────────────────────────────
+; -- Section Descriptions -----------------------------------------
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
     !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} "Install ${APP_NAME} core files (required)."
     !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "Create a shortcut on your Desktop."
     !insertmacro MUI_DESCRIPTION_TEXT ${SecAutostart} "Automatically start ${APP_NAME} when Windows starts."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
-; ──────────────────────────────────────────────────────────────
+; =================================================================
 ; UNINSTALLER
-; ──────────────────────────────────────────────────────────────
+; =================================================================
 
 Section "Uninstall"
     ; Remove autostart registry entry

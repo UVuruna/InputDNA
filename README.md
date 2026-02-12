@@ -69,6 +69,7 @@ flowchart LR
 - [Folder Documentation](#folder-documentation)
 - [Specification Documents](#specification-documents)
 - [Quick Start](#quick-start)
+- [Building & Installation](#building--installation)
 - [Requirements](#requirements)
 
 ---
@@ -78,51 +79,70 @@ flowchart LR
 ## Project Structure
 
 ```
-InputDNA/
-  main.py                     Entry point, orchestrates everything
-  config.py                   All settings, thresholds, paths
-  requirements.txt            Dependencies
-  CLAUDE.md                   Claude Code instructions
-  implementation-plan.md      Full system design document
-  README.md                   This file
-  .gitignore
-  listeners/                  OS-level input hooks
-    mouse_listener.py         pynput mouse hook -> raw events
-    keyboard_listener.py      pynput keyboard hook -> raw events
-  processors/                 Event analysis & session building
-    __init__.py               EventProcessor (central dispatcher)
-    mouse_session.py          Movement session detection
-    click_processor.py        Click sequences (single/double/spam)
-    drag_detector.py          Drag operation detection
-    keyboard_processor.py     Keystroke timing, transitions, shortcuts
-  database/                   SQLite persistence layer
-    schema.py                 All CREATE TABLE statements + pragmas
-    writer.py                 Batched DB writer (single thread)
-  models/                     Data classes (NOT ML models)
-    events.py                 Raw event types from listeners
-    sessions.py               Processed records for DB
-  utils/                      Shared utilities
-    timing.py                 perf_counter_ns wrappers
-    keyboard_layout.py        Scan code -> hand/finger map
-    hotkeys.py                Pause/resume hotkey (Ctrl+Alt+R)
-  ui/                         System tray interface
-    tray_icon.py              pystray: green/yellow/red status
-  gui/                        PySide6 desktop application
-    login_screen.py           User login/register
-    main_dashboard.py         Record / Train / Validate controls
-    validation_screen.py      Model accuracy testing
-    styles.py                 Dark theme QSS
-    user_db.py                User profile database
-  data/                       Runtime database (gitignored)
-    movements.db              Created at runtime
-  docs/                       Specification documents
-    01-mouse-movement-recorder.md
-    02-behavioral-adaptations.md
-    03-keyboard-input-recorder.md
-    04-validation-testing.md
-    05-ml-model-architecture.md
-    06-replay-engine.md
-    07-technical-conclusions.md
+📁 InputDNA/
+  🐍 main.py                         Entry point, orchestrates everything
+  ⚙️ config.py                        All settings, thresholds, paths
+  📄 requirements.txt                 Dependencies
+  📝 CLAUDE.md                        Claude Code instructions
+  📝 implementation-plan.md           Full system design document
+  📝 README.md                        This file
+  📄 .gitignore
+  📁 listeners/                       OS-level input hooks
+    🐍 mouse_listener.py              pynput mouse hook → raw events
+    🐍 keyboard_listener.py           pynput keyboard hook → raw events
+  📁 processors/                      Event analysis & session building
+    🐍 __init__.py                    EventProcessor (central dispatcher)
+    🐍 mouse_session.py               Movement session detection
+    🐍 click_processor.py             Click sequences (single/double/spam)
+    🐍 drag_detector.py               Drag operation detection
+    🐍 keyboard_processor.py          Keystroke timing, transitions, shortcuts
+  📁 database/                        SQLite persistence layer
+    🐍 schema.py                      All CREATE TABLE statements + pragmas
+    🐍 writer.py                      Batched DB writer (single thread)
+    🐍 rotation.py                    DB size rotation and archiving
+  📁 models/                          Data classes (NOT ML models)
+    🐍 events.py                      Raw event types from listeners
+    🐍 sessions.py                    Processed records for DB
+  📁 utils/                           Shared utilities
+    🐍 timing.py                      perf_counter_ns wrappers
+    🐍 keyboard_layout.py             Scan code → hand/finger map
+    🐍 hotkeys.py                     Pause/resume hotkey (Ctrl+Alt+R)
+    🐍 system_monitor.py              Mouse speed, resolution, layout tracking
+  📁 ui/                              System tray interface
+    🐍 tray_icon.py                   pystray: green/yellow/red status
+    🖼️ InputDNA-working.png           Tray icon (recording)
+    🖼️ InputDNA-paused.png            Tray icon (paused)
+    🖼️ InputDNA-stopped.png           Tray icon (stopped)
+  📁 gui/                             PySide6 desktop application
+    🐍 login_screen.py                User login/register
+    🐍 main_dashboard.py              Record / Train / Validate controls
+    🐍 validation_screen.py           Model accuracy testing
+    🐍 settings_screen.py             Per-user GUI configuration
+    🐍 calibration_dialog.py          Click speed calibration
+    🐍 dpi_dialog.py                  DPI measurement dialog
+    🐍 export_utils.py                Database export from dashboard
+    🐍 user_db.py                     User profile database
+    🐍 user_settings.py               Per-user settings persistence
+    🐍 styles.py                      Dark theme QSS
+  📁 setup/                           Build & installation scripts
+    🐍 build.py                       PyInstaller + signing + NSIS packaging
+    🐍 create_cert.py                 Self-signed code signing certificate
+    📄 installer.nsi                  NSIS Windows installer script
+    🖼️ InputDNA.ico                   Application icon
+  📁 data/                            Runtime database (gitignored)
+    📁 db/                            Per-user SQLite databases
+    📁 logs/                          Log files
+  📁 docs/                            Specification documents
+    📝 01-mouse-movement-recorder.md
+    📝 02-behavioral-adaptations.md
+    📝 03-keyboard-input-recorder.md
+    📝 04-validation-testing.md
+    📝 05-ml-model-architecture.md
+    📝 06-replay-engine.md
+    📝 07-technical-conclusions.md
+  📁 support/                         Design assets and branding
+    📁 logo/                          SVG logos
+    📁 adobe/                         Illustrator source files
 ```
 
 > **Note:** Every folder contains a `__folder.md` doc with detailed documentation of its files,
@@ -146,6 +166,7 @@ Each module folder has its own documentation file (`__folder.md`):
 | `ui/` | [`__ui.md`](ui/__ui.md) | System tray icon (pystray) |
 | `gui/` | [`__gui.md`](gui/__gui.md) | PySide6 desktop GUI (login, dashboard, validation) |
 | `data/` | [`__data.md`](data/__data.md) | Runtime database location |
+| `setup/` | [`__setup.md`](setup/__setup.md) | Build pipeline and Windows installer |
 | `support/` | [`__support.md`](support/__support.md) | Design assets and branding |
 
 ---
@@ -236,6 +257,62 @@ python main.py
 
 ---
 
+<a id="building--installation"></a>
+
+## Building & Installation
+
+InputDNA can be packaged as a standalone Windows application with a classic installer.
+
+### Prerequisites
+
+| Tool | Purpose | Install |
+|------|---------|---------|
+| PyInstaller | Bundle Python into exe | `pip install pyinstaller` |
+| NSIS | Create Windows installer | [nsis.sourceforge.io](https://nsis.sourceforge.io/) |
+| Windows SDK | Code signing (optional) | [developer.microsoft.com](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/) |
+
+### Build Steps
+
+```bash
+# 1. One-time: generate self-signed code signing certificate
+python setup/create_cert.py
+
+# 2. Build exe + create installer
+python setup/build.py
+
+# Output: dist/InputDNA_Setup.exe
+```
+
+### What the Installer Does
+
+1. **Choose install location** — default `C:\Program Files\InputDNA\`
+2. **Copy program files** — exe + runtime dependencies
+3. **Create data directories** — `%LOCALAPPDATA%\InputDNA\db\` and `logs\`
+4. **Add Windows Defender exclusions** — prevents false positives from input hooks
+5. **Create shortcuts** — Start Menu + optional Desktop
+6. **Optional autostart** — launch InputDNA with Windows
+7. **Register in Add/Remove Programs** — standard uninstall support
+
+### Installed File Layout
+
+```
+📁 C:\Program Files\InputDNA\           ← Program files
+  📄 InputDNA.exe
+  🖼️ InputDNA.ico
+  📄 (PyInstaller runtime files)
+
+📁 %LOCALAPPDATA%\InputDNA\             ← User data (preserved on uninstall)
+  📁 db\
+    🗄️ profiles.db                      ← User profiles
+    📁 user_1\
+      🗄️ movements.db                   ← Per-user recordings
+  📁 logs\
+```
+
+> **Note:** Uninstalling removes program files but preserves user data in AppData.
+
+---
+
 <a id="requirements"></a>
 
 ## Requirements
@@ -250,9 +327,9 @@ python main.py
 | `pynput` | >=1.7.6 | Mouse & keyboard hooks |
 | `pystray` | >=0.19.5 | System tray icon |
 | `Pillow` | >=10.0 | Required by pystray |
+| `PySide6` | >=6.5 | Desktop GUI (login, dashboard, settings) |
 
-> **Note:** No numpy, no pywin32. Pure standard library + 3 packages.
-> Distance and math: `math.sqrt`, `math.atan2` from stdlib.
+> **Note:** No numpy, no pywin32. Distance and math use `math.sqrt`, `math.atan2` from stdlib.
 
 ---
 
