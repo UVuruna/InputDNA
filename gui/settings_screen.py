@@ -130,7 +130,7 @@ class SettingsScreen(QWidget):
         self._timeout_slider.setRange(100, 1000)
         self._timeout_slider.setSingleStep(50)
         self._timeout_label = QLabel("300 ms")
-        self._timeout_label.setFixedWidth(60)
+        self._timeout_label.setMinimumWidth(60)
         self._timeout_slider.valueChanged.connect(
             lambda v: self._timeout_label.setText(f"{v} ms")
         )
@@ -145,7 +145,7 @@ class SettingsScreen(QWidget):
         self._distance_slider = QSlider(Qt.Horizontal)
         self._distance_slider.setRange(0, 20)
         self._distance_label = QLabel("3 px")
-        self._distance_label.setFixedWidth(60)
+        self._distance_label.setMinimumWidth(60)
         self._distance_slider.valueChanged.connect(
             lambda v: self._distance_label.setText(f"{v} px")
         )

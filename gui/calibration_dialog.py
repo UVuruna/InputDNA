@@ -29,7 +29,7 @@ class ClickCalibrationDialog(QDialog):
         self._target_clicks = config.CALIBRATION_CLICK_COUNT
         self._result_ms: int | None = None
         self.setWindowTitle("Click Speed Calibration")
-        self.setFixedSize(450, 400)
+        self.setMinimumWidth(450)
         self._build_ui()
 
     def _build_ui(self):

@@ -94,7 +94,7 @@ class DpiMeasurementDialog(QDialog):
         self._user_id = user_id
         self._result_dpi: int | None = None
         self.setWindowTitle("Measure Mouse DPI")
-        self.setFixedSize(500, 480)
+        self.setMinimumWidth(500)
         self._build_ui()
 
     def _build_ui(self):
