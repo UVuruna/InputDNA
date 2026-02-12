@@ -174,9 +174,11 @@ Windows system double-click time as reference. Saves result to
 ### `dpi_dialog.py` — DPI Measurement
 
 Modal dialog: user enters a known physical distance (cm), then
-drags the mouse across that distance on screen. Calculates DPI
-from pixel delta and physical distance, accounting for HiDPI
-scaling. Alternative to manual DPI entry in settings.
+drags the mouse across that distance. Uses Windows Raw Input API
+(`WM_INPUT` + `GetRawInputData`) to capture actual mouse sensor
+counts, bypassing OS pointer speed and Enhanced Pointer Precision.
+Calculates DPI from raw counts and physical distance. Alternative
+to manual DPI entry in settings.
 
 ### `export_utils.py` — Data Export Utilities
 

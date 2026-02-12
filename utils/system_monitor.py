@@ -53,6 +53,30 @@ def get_mouse_acceleration() -> bool:
     return bool(params[2])
 
 
+def speed_to_multiplier(speed: int) -> float:
+    """
+    Convert Windows pointer speed (SPI_GETMOUSESPEED, 1-20) to cursor multiplier.
+
+    With Enhanced Pointer Precision OFF, cursor movement is:
+        cursor_pixels = mouse_counts * multiplier
+
+    Default speed is 10 → multiplier 1.0 (1:1 mapping).
+
+    Lookup table derived from Windows pointer ballistics:
+      Speed  1-2:  multiplier = speed / 32
+      Speed  3-10: multiplier = (speed - 2) / 8
+      Speed 11-20: multiplier = (speed - 6) / 4
+    """
+    if speed <= 0:
+        return 1.0
+    if speed <= 2:
+        return speed / 32.0
+    elif speed <= 10:
+        return (speed - 2) / 8.0
+    else:
+        return (speed - 6) / 4.0
+
+
 def get_screen_resolution() -> str:
     """
     Get primary monitor resolution as 'WIDTHxHEIGHT' string.

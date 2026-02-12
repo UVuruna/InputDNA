@@ -54,6 +54,12 @@ Maintains modifier state (`ctrl`, `alt`, `shift`, `win`) internally.
 Calculates key press duration (press→release) and pushes completed
 `RawKeyRelease` events with duration attached.
 
+**Key name resolution:** When a modifier is held (e.g. Ctrl+C), pynput gives
+`key.char` as the ASCII control character (`'\x03'`) instead of the letter.
+`_name_from_vk()` detects control characters (ord < 0x20) and resolves the
+human-readable name from the virtual key code instead — using direct ASCII
+mapping for A-Z and 0-9, and `GetKeyNameTextW` for other keys.
+
 <a id="data-flow"></a>
 
 ## Data Flow

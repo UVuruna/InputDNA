@@ -62,6 +62,25 @@ def _vk_to_scan(vk: int) -> int:
     return scan if scan else vk  # Fallback to vk if mapping fails
 
 
+def _name_from_vk(vk: int) -> str:
+    """Resolve human-readable key name from virtual key code.
+
+    Used when key.char gives a control character (e.g. Ctrl+C → '\\x03').
+    """
+    if 0x41 <= vk <= 0x5A:  # A-Z
+        return chr(vk).lower()
+    if 0x30 <= vk <= 0x39:  # 0-9
+        return chr(vk)
+
+    # Other keys: ask Windows for the name via scan code
+    scan = _user32.MapVirtualKeyW(vk, 0)  # MAPVK_VK_TO_VSC
+    if scan:
+        buf = ctypes.create_unicode_buffer(64)
+        if _user32.GetKeyNameTextW(scan << 16, buf, 64):
+            return buf.value.lower()
+    return f"vk_{vk}"
+
+
 def _get_key_info(key) -> tuple[int, int, str]:
     """
     Extract (vk, scan_code, key_name) from a pynput key event.
@@ -71,9 +90,14 @@ def _get_key_info(key) -> tuple[int, int, str]:
         vk = key.vk
         scan = _vk_to_scan(vk)
         try:
-            name = key.char if key.char else str(key)
+            char = key.char
+            # Control characters (Ctrl+C → '\x03') are not readable names
+            if char and ord(char) >= 0x20:
+                name = char
+            else:
+                name = _name_from_vk(vk)
         except AttributeError:
-            name = str(key)
+            name = _name_from_vk(vk)
     elif hasattr(key, 'value') and hasattr(key.value, 'vk'):
         # Special keys (Key.ctrl_l, Key.shift, etc.)
         vk = key.value.vk
