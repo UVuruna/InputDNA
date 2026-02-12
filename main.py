@@ -20,8 +20,11 @@ import queue
 import logging
 import threading
 
+from pathlib import Path
+
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from PySide6.QtCore import QTimer
+from PySide6.QtGui import QIcon
 
 import config
 from database.schema import init_db
@@ -33,7 +36,7 @@ from processors import EventProcessor
 from models.sessions import RecordingSessionRecord
 from utils.timing import now_ns, wall_clock_iso
 from utils.hotkeys import register_toggle_hotkey
-from utils.system_monitor import SystemMonitor
+from utils.system_monitor import SystemMonitor, PollingRateEstimator
 from ui.tray_icon import TrayIcon
 from gui.login_screen import LoginScreen
 from gui.main_dashboard import MainDashboard
@@ -68,6 +71,7 @@ class Recorder:
         self._recording_session: RecordingSessionRecord | None = None
         self._session_id: int = 0
         self._paused = False
+        self._polling_estimator = PollingRateEstimator()
 
     def start(self):
         """Start all recording threads. Returns immediately."""
@@ -107,6 +111,7 @@ class Recorder:
         self._processor = EventProcessor(
             self._event_queue, self._db_writer,
             recording_session_id=self._session_id,
+            polling_estimator=self._polling_estimator,
         )
         self._processor.start()
 
@@ -185,6 +190,10 @@ class Recorder:
     @property
     def pending_writes(self) -> int:
         return self._db_writer.pending if self._db_writer else 0
+
+    @property
+    def estimated_polling_hz(self) -> int | None:
+        return self._polling_estimator.estimated_hz
 
 
 class MainWindow(QMainWindow):
@@ -332,13 +341,19 @@ class MainWindow(QMainWindow):
         logger.info("Recording stopped from dashboard")
 
     def _update_stats(self):
-        """Update dashboard stats from recorder (runs on timer)."""
+        """Update dashboard stats and system info from recorder (runs on timer)."""
         if self._recorder and self._dashboard:
             self._dashboard.update_stats(
                 self._recorder.movement_count,
                 self._recorder.click_count,
                 self._recorder.keystroke_count,
             )
+            # Update system info periodically
+            if self._system_monitor:
+                self._dashboard.update_system_info(
+                    self._system_monitor.current_state,
+                    self._recorder.estimated_polling_hz,
+                )
 
     # ── Tray icon ──────────────────────────────────────────────
 
@@ -433,7 +448,13 @@ class MainWindow(QMainWindow):
     # ── Window close ───────────────────────────────────────────
 
     def closeEvent(self, event):
-        """Clean shutdown on window close."""
+        """Smart close: navigate back on secondary screens, exit on login/dashboard."""
+        current = self._stack.currentIndex()
+        if current in (self._SETTINGS, self._VALIDATION):
+            self._show_dashboard()
+            event.ignore()
+            return
+
         if self._recorder:
             self._stop_recording()
         event.accept()
@@ -442,6 +463,13 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setStyleSheet(DARK_STYLE)
+
+    # Set application icon (title bar + taskbar)
+    icon_path = Path(__file__).parent / "setup" / "InputDNA.ico"
+    if getattr(sys, 'frozen', False):
+        icon_path = Path(sys._MEIPASS) / "InputDNA.ico"
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
 
     window = MainWindow()
     window.show()

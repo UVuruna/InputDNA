@@ -66,10 +66,21 @@ def get_screen_resolution() -> str:
 
 
 def get_keyboard_layout() -> str:
-    """Get active keyboard layout for the foreground window."""
+    """Get active keyboard layout name for the foreground window.
+
+    Returns human-readable name like 'English (United States)'.
+    Falls back to hex layout ID if name lookup fails.
+    """
     hwnd = _user32.GetForegroundWindow()
     thread_id = _user32.GetWindowThreadProcessId(hwnd, None)
     layout_id = _user32.GetKeyboardLayout(thread_id)
+    lang_id = layout_id & 0xFFFF
+
+    # LOCALE_SLANGUAGE = 0x2 — full localized language name
+    buf = ctypes.create_unicode_buffer(256)
+    if ctypes.windll.kernel32.GetLocaleInfoW(lang_id, 0x2, buf, 256) and buf.value:
+        return buf.value
+
     return hex(layout_id & 0xFFFFFFFF)
 
 
