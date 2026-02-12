@@ -53,6 +53,10 @@ QLineEdit, QDateEdit {
     font-size: 14px;
 }
 
+QDateEdit {
+    padding: 6px 4px;
+}
+
 QLineEdit:focus, QDateEdit:focus {
     border: 1px solid #e94560;
 }

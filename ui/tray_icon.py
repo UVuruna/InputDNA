@@ -124,6 +124,12 @@ class TrayIcon:
                 # notify not supported on all platforms
                 logger.info(f"Stats: {stats}")
 
+    def stop(self):
+        """Stop the tray icon programmatically (called from outside)."""
+        if self._icon is not None:
+            self._icon.stop()
+            self._icon = None
+
     def _quit(self, icon, item):
         """Menu: Quit clicked."""
         logger.info("Quit requested from tray")

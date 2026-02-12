@@ -11,11 +11,11 @@ On successful login, emits signal with UserProfile to switch to dashboard.
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QDateEdit, QPushButton, QTabWidget, QMessageBox, QSpacerItem,
-    QSizePolicy,
+    QSizePolicy, QComboBox,
 )
 from PySide6.QtCore import Signal, QDate, Qt
 
-from gui.user_db import UserProfile, register, login
+from gui.user_db import UserProfile, register, login, get_all_users
 
 
 class LoginScreen(QWidget):
@@ -62,9 +62,10 @@ class LoginScreen(QWidget):
         lay.setSpacing(12)
 
         lay.addWidget(QLabel("Username:"))
-        self._login_username = QLineEdit()
-        self._login_username.setPlaceholderText("Enter your username")
-        lay.addWidget(self._login_username)
+        self._login_combo = QComboBox()
+        self._login_combo.setPlaceholderText("Select user")
+        self._refresh_user_list()
+        lay.addWidget(self._login_combo)
 
         lay.addSpacing(10)
 
@@ -72,9 +73,6 @@ class LoginScreen(QWidget):
         btn.setObjectName("primary")
         btn.clicked.connect(self._do_login)
         lay.addWidget(btn)
-
-        # Enter key triggers login
-        self._login_username.returnPressed.connect(self._do_login)
 
         lay.addStretch()
         return w
@@ -112,10 +110,16 @@ class LoginScreen(QWidget):
         lay.addStretch()
         return w
 
+    def _refresh_user_list(self):
+        """Populate the login dropdown with registered usernames."""
+        self._login_combo.clear()
+        for username in get_all_users():
+            self._login_combo.addItem(username)
+
     def _do_login(self):
-        username = self._login_username.text().strip()
+        username = self._login_combo.currentText().strip()
         if not username:
-            QMessageBox.warning(self, "Error", "Please enter a username.")
+            QMessageBox.warning(self, "Error", "No user selected.\nPlease register first.")
             return
 
         profile = login(username)
@@ -123,7 +127,7 @@ class LoginScreen(QWidget):
             self.login_success.emit(profile)
         else:
             QMessageBox.warning(self, "Error",
-                                f"Username '{username}' not found.\nPlease register first.")
+                                f"Username '{username}' not found.")
 
     def _do_register(self):
         username = self._reg_username.text().strip()
@@ -137,6 +141,7 @@ class LoginScreen(QWidget):
         ok, msg = register(username, surname, dob)
         if ok:
             QMessageBox.information(self, "Success", msg)
+            self._refresh_user_list()
             # Auto-login after registration
             profile = login(username)
             if profile:

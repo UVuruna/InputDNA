@@ -76,6 +76,12 @@ def build_pyinstaller():
         "tkinter",
     ]
 
+    # Modules PyInstaller fails to detect automatically
+    hidden_imports = [
+        "pystray",
+        "pystray._win32",
+    ]
+
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
@@ -88,7 +94,12 @@ def build_pyinstaller():
         "--uac-admin",
         # Add data files
         "--add-data", f"{ICON_PATH};.",
+        "--add-data", f"{PROJECT_DIR / 'ui' / '*.png'};ui",
     ]
+
+    # Add hidden imports
+    for mod in hidden_imports:
+        cmd.extend(["--hidden-import", mod])
 
     # Add exclude flags
     for mod in exclude_modules:
