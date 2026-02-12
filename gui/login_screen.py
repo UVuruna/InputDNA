@@ -8,6 +8,8 @@ First screen shown on app start. Two tabs:
 On successful login, emits signal with UserProfile to switch to dashboard.
 """
 
+from datetime import date
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QDateEdit, QPushButton, QTabWidget, QMessageBox, QSpacerItem,
@@ -15,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, QDate, Qt
 
-from gui.user_db import UserProfile, register, login, get_all_users
+from gui.user_db import UserProfile, register, login, get_all_profiles
 
 
 class LoginScreen(QWidget):
@@ -50,7 +52,7 @@ class LoginScreen(QWidget):
         tabs = QTabWidget()
         tabs.addTab(self._build_login_tab(), "Login")
         tabs.addTab(self._build_register_tab(), "Register")
-        tabs.setFixedWidth(400)
+        tabs.setMinimumWidth(400)
         layout.addWidget(tabs, alignment=Qt.AlignCenter)
 
         layout.addStretch()
@@ -111,13 +113,26 @@ class LoginScreen(QWidget):
         return w
 
     def _refresh_user_list(self):
-        """Populate the login dropdown with registered usernames."""
+        """Populate the login dropdown with 'Username Surname Agey' format."""
         self._login_combo.clear()
-        for username in get_all_users():
-            self._login_combo.addItem(username)
+        today = date.today()
+        for profile in get_all_profiles():
+            age = self._calc_age(profile.date_of_birth, today)
+            display = f"{profile.username} {profile.surname} {age}y"
+            self._login_combo.addItem(display, profile.username)
+
+    @staticmethod
+    def _calc_age(dob_str: str, today: date) -> int:
+        """Calculate age in years from ISO date string."""
+        parts = dob_str.split("-")
+        dob = date(int(parts[0]), int(parts[1]), int(parts[2]))
+        age = today.year - dob.year
+        if (today.month, today.day) < (dob.month, dob.day):
+            age -= 1
+        return age
 
     def _do_login(self):
-        username = self._login_combo.currentText().strip()
+        username = self._login_combo.currentData()
         if not username:
             QMessageBox.warning(self, "Error", "No user selected.\nPlease register first.")
             return

@@ -45,7 +45,6 @@ class ValidationScreen(QWidget):
         header = QHBoxLayout()
 
         back_btn = QPushButton("← Back")
-        back_btn.setFixedWidth(80)
         back_btn.clicked.connect(self._on_back)
         header.addWidget(back_btn)
 

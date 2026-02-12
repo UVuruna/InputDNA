@@ -89,7 +89,6 @@ class SettingsScreen(QWidget):
         header = QHBoxLayout()
 
         back_btn = QPushButton("Back")
-        back_btn.setFixedWidth(80)
         back_btn.clicked.connect(self.back_signal.emit)
         header.addWidget(back_btn)
 
@@ -190,7 +189,6 @@ class SettingsScreen(QWidget):
         self._dpi_spin.setSingleStep(100)
         dpi_row.addWidget(self._dpi_spin)
         self._measure_dpi_btn = QPushButton("Measure")
-        self._measure_dpi_btn.setFixedWidth(90)
         self._measure_dpi_btn.clicked.connect(self.calibrate_dpi_signal.emit)
         dpi_row.addWidget(self._measure_dpi_btn)
         sys_layout.addLayout(dpi_row, row, 1)
@@ -208,7 +206,6 @@ class SettingsScreen(QWidget):
         self._click_gap_label = QLabel("500 ms (default)")
         click_row.addWidget(self._click_gap_label)
         cal_btn = QPushButton("Calibrate")
-        cal_btn.setFixedWidth(90)
         cal_btn.clicked.connect(self.calibrate_click_signal.emit)
         click_row.addWidget(cal_btn)
         cal_layout.addLayout(click_row, 0, 1)

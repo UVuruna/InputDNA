@@ -86,3 +86,18 @@ def get_all_users() -> list[str]:
     rows = conn.execute("SELECT username FROM profiles ORDER BY username").fetchall()
     conn.close()
     return [r[0] for r in rows]
+
+
+def get_all_profiles() -> list[UserProfile]:
+    """Get all registered user profiles."""
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT id, username, surname, date_of_birth, created_at "
+        "FROM profiles ORDER BY username"
+    ).fetchall()
+    conn.close()
+    return [
+        UserProfile(id=r[0], username=r[1], surname=r[2],
+                    date_of_birth=r[3], created_at=r[4])
+        for r in rows
+    ]
