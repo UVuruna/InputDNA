@@ -65,12 +65,10 @@ class MainDashboard(QWidget):
         header.addWidget(user_label)
 
         settings_btn = QPushButton("Settings")
-        settings_btn.setFixedWidth(90)
         settings_btn.clicked.connect(self.settings_signal.emit)
         header.addWidget(settings_btn)
 
         logout_btn = QPushButton("Logout")
-        logout_btn.setFixedWidth(80)
         logout_btn.clicked.connect(self.logout_signal.emit)
         header.addWidget(logout_btn)
 
@@ -199,6 +197,7 @@ class MainDashboard(QWidget):
         self._record_btn.setStyleSheet("")  # Force style refresh
         self._record_btn.style().unpolish(self._record_btn)
         self._record_btn.style().polish(self._record_btn)
+        self._record_btn.clearFocus()
         self._status_label.setText("Status: Recording...")
         self._status_label.setObjectName("status-recording")
         self._status_label.setStyleSheet("")
@@ -218,6 +217,7 @@ class MainDashboard(QWidget):
         self._record_btn.setStyleSheet("")
         self._record_btn.style().unpolish(self._record_btn)
         self._record_btn.style().polish(self._record_btn)
+        self._record_btn.clearFocus()
         self._status_label.setText("Status: Idle")
         self._status_label.setObjectName("status")
         self._status_label.setStyleSheet("")
@@ -309,7 +309,8 @@ class MainDashboard(QWidget):
         polling_hz: estimated mouse polling rate (None if not yet estimated)
         """
         self._layout_label.setText(state.get("keyboard_layout", "—"))
-        self._mouse_speed_label.setText(state.get("mouse_speed", "—"))
+        speed = state.get("mouse_speed", "—")
+        self._mouse_speed_label.setText(f"{speed} / 20" if speed != "—" else "—")
         accel = state.get("mouse_acceleration", "—")
         self._accel_label.setText("On" if accel == "True" else "Off" if accel == "False" else accel)
         self._resolution_label.setText(state.get("screen_resolution", "—"))

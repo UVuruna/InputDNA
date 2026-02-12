@@ -282,4 +282,104 @@ QKeySequenceEdit {
 QKeySequenceEdit:focus {
     border: 1px solid #e94560;
 }
+
+/* ── Button focus indicator removal ─────────────────── */
+QPushButton:focus {
+    border: none;
+    outline: none;
+}
+
+QPushButton#primary:focus {
+    border: none;
+    outline: none;
+}
+
+QPushButton#success:focus {
+    border: none;
+    outline: none;
+}
+
+QPushButton#danger:focus {
+    border: none;
+    outline: none;
+}
+
+/* ── Calendar popup (QDateEdit) ─────────────────────── */
+QCalendarWidget {
+    background-color: #1a1a2e;
+    color: #eee;
+}
+
+QCalendarWidget QWidget#qt_calendar_navigationbar {
+    background-color: #16213e;
+    padding: 4px;
+}
+
+QCalendarWidget QToolButton {
+    background-color: #16213e;
+    color: #eee;
+    border: none;
+    padding: 6px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+QCalendarWidget QToolButton:hover {
+    background-color: #0f3460;
+}
+
+QCalendarWidget QToolButton::menu-indicator {
+    image: none;
+}
+
+QCalendarWidget QSpinBox {
+    background-color: #16213e;
+    color: #eee;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 14px;
+    selection-background-color: #e94560;
+    selection-color: #fff;
+}
+
+QCalendarWidget QSpinBox::up-button,
+QCalendarWidget QSpinBox::down-button {
+    background-color: #0f3460;
+    border: none;
+    width: 18px;
+}
+
+QCalendarWidget QSpinBox::up-button:hover,
+QCalendarWidget QSpinBox::down-button:hover {
+    background-color: #1a4a8a;
+}
+
+QCalendarWidget QMenu {
+    background-color: #16213e;
+    color: #eee;
+    border: 1px solid #0f3460;
+}
+
+QCalendarWidget QMenu::item:selected {
+    background-color: #0f3460;
+    color: #eee;
+}
+
+QCalendarWidget QAbstractItemView {
+    background-color: #1a1a2e;
+    color: #eee;
+    selection-background-color: #e94560;
+    selection-color: #fff;
+    border: 1px solid #0f3460;
+    outline: none;
+}
+
+QCalendarWidget QAbstractItemView:enabled {
+    color: #eee;
+}
+
+QCalendarWidget QAbstractItemView:disabled {
+    color: #666;
+}
 """
