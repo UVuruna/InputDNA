@@ -6,7 +6,8 @@ Build and installation scripts for packaging InputDNA as a distributable Windows
 
 ```
 1. python setup/create_cert.py    — One-time: generate signing certificate
-2. python setup/build.py          — Each release: build exe + installer
+2. python setup/svg_to_ico.py     — After logo changes: regenerate ICO from SVG
+3. python setup/build.py          — Each release: build exe + installer
 ```
 
 ### Prerequisites
@@ -53,9 +54,28 @@ Data directories created at install time:
 
 Uninstaller removes program files but preserves user data.
 
+### `svg_to_ico.py` — ICO Generator
+
+Renders `support/logo/light/UV-InputDNA.svg` into a multi-resolution ICO file
+at `setup/InputDNA.ico`. Uses PySide6 `QSvgRenderer` + Pillow. Run once after
+logo changes:
+
+```
+python setup/svg_to_ico.py
+```
+
+Uses the light-theme variant (dark outlines) for the static ICO — best
+visibility across most OS contexts (Explorer, shortcuts, Add/Remove Programs).
+
 ### `InputDNA.ico` — Application Icon
 
-Icon file used by PyInstaller (exe icon) and NSIS (installer icon).
+Generated from `UV-InputDNA.svg` by `svg_to_ico.py`. Contains multiple
+resolutions (16, 32, 48, 64, 128, 256px). Used by PyInstaller (exe binary
+icon) and NSIS (installer icon, shortcuts).
+
+> **Note:** At runtime, the window title bar and taskbar icon use the
+> theme-aware SVG directly (`support/logo/{theme}/UV-InputDNA.svg`), not
+> the ICO. The ICO is only for the exe file icon and installer.
 
 ## Installed File Layout
 
@@ -63,14 +83,16 @@ Icon file used by PyInstaller (exe icon) and NSIS (installer icon).
 C:\Program Files\InputDNA\          ← Program files
   InputDNA.exe
   InputDNA.ico
+  ui/light/                         ← Tray icons (light theme)
+  ui/dark/                          ← Tray icons (dark theme)
+  logo/light/UV-InputDNA.svg        ← Window icon (light theme)
+  logo/dark/UV-InputDNA.svg         ← Window icon (dark theme)
   (PyInstaller runtime files)
 
 C:\Users\<user>\AppData\Local\InputDNA\   ← User data
   db\
-    movements.db                    ← Input recordings
     profiles.db                     ← User profiles
-  logs\
-    (future log files)
+  (per-user data folders)
 ```
 
 ## Design Decisions
