@@ -199,11 +199,13 @@ class MainDashboard(QWidget):
 
         # Click breakdown: Left / Right / Middle
         row += 1
-        for col, (label, attr) in enumerate([
+        sub_row = QHBoxLayout()
+        sub_row.setContentsMargins(20, 0, 0, 0)
+        for label, attr in [
             ("Left", "_left_clicks_val"),
             ("Right", "_right_clicks_val"),
             ("Middle", "_middle_clicks_val"),
-        ]):
+        ]:
             sub = QVBoxLayout()
             sub.setSpacing(1)
             lbl = QLabel(label)
@@ -215,15 +217,18 @@ class MainDashboard(QWidget):
             val.setAlignment(Qt.AlignCenter)
             setattr(self, attr, val)
             sub.addWidget(val)
-            mouse_layout.addLayout(sub, row, col + 1)
+            sub_row.addLayout(sub)
+        mouse_layout.addLayout(sub_row, row, 0, 1, 4)
 
         # Click sequences: Double / Triple / Spam
         row += 1
-        for col, (label, attr) in enumerate([
+        sub_row = QHBoxLayout()
+        sub_row.setContentsMargins(20, 0, 0, 0)
+        for label, attr in [
             ("Double", "_double_clicks_val"),
             ("Triple", "_triple_clicks_val"),
             ("Spam", "_spam_clicks_val"),
-        ]):
+        ]:
             sub = QVBoxLayout()
             sub.setSpacing(1)
             lbl = QLabel(label)
@@ -235,7 +240,8 @@ class MainDashboard(QWidget):
             val.setAlignment(Qt.AlignCenter)
             setattr(self, attr, val)
             sub.addWidget(val)
-            mouse_layout.addLayout(sub, row, col + 1)
+            sub_row.addLayout(sub)
+        mouse_layout.addLayout(sub_row, row, 0, 1, 4)
 
         # Drags
         row += 1
@@ -277,11 +283,13 @@ class MainDashboard(QWidget):
 
         # Keystroke breakdown row 1: Upper / Lower / Code
         row += 1
-        for col, (label, attr) in enumerate([
+        sub_row = QHBoxLayout()
+        sub_row.setContentsMargins(20, 0, 0, 0)
+        for label, attr in [
             ("Upper", "_upper_keys_val"),
             ("Lower", "_lower_keys_val"),
             ("Code", "_code_keys_val"),
-        ]):
+        ]:
             sub = QVBoxLayout()
             sub.setSpacing(1)
             lbl = QLabel(label)
@@ -293,15 +301,18 @@ class MainDashboard(QWidget):
             val.setAlignment(Qt.AlignCenter)
             setattr(self, attr, val)
             sub.addWidget(val)
-            kb_layout.addLayout(sub, row, col + 1)
+            sub_row.addLayout(sub)
+        kb_layout.addLayout(sub_row, row, 0, 1, 4)
 
         # Keystroke breakdown row 2: Number / Numpad / Other
         row += 1
-        for col, (label, attr) in enumerate([
+        sub_row = QHBoxLayout()
+        sub_row.setContentsMargins(20, 0, 0, 0)
+        for label, attr in [
             ("Number", "_number_keys_val"),
             ("Numpad", "_numpad_keys_val"),
             ("Other", "_other_keys_val"),
-        ]):
+        ]:
             sub = QVBoxLayout()
             sub.setSpacing(1)
             lbl = QLabel(label)
@@ -313,7 +324,8 @@ class MainDashboard(QWidget):
             val.setAlignment(Qt.AlignCenter)
             setattr(self, attr, val)
             sub.addWidget(val)
-            kb_layout.addLayout(sub, row, col + 1)
+            sub_row.addLayout(sub)
+        kb_layout.addLayout(sub_row, row, 0, 1, 4)
 
         # Shortcuts
         row += 1

@@ -239,6 +239,7 @@ class SystemMonitor:
         self._on_event = on_event
         self._running = False
         self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
         self._last_state: dict[str, str] = {}
 
     def start(self):
@@ -258,10 +259,11 @@ class SystemMonitor:
         self._thread.start()
 
     def stop(self):
-        """Stop the polling thread."""
+        """Stop the polling thread. Wakes it immediately via Event."""
         self._running = False
+        self._stop_event.set()
         if self._thread is not None:
-            self._thread.join(timeout=5)
+            self._thread.join(timeout=2)
         logger.info("System monitor stopped")
 
     @property
@@ -272,7 +274,7 @@ class SystemMonitor:
     def _poll_loop(self):
         """Poll system state at configured interval, emit changes."""
         while self._running:
-            time.sleep(config.SYSTEM_MONITOR_INTERVAL_S)
+            self._stop_event.wait(timeout=config.SYSTEM_MONITOR_INTERVAL_S)
             if not self._running:
                 break
 
