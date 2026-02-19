@@ -33,22 +33,46 @@ _AUTOSTART_NAME = "InputDNA"
 
 
 def _is_autostart_enabled() -> bool:
-    """Check if InputDNA is set to start with Windows."""
+    """Check if InputDNA is set to start with Windows.
+
+    Checks both the Run key (command exists) and StartupApproved key
+    (not disabled by Task Manager / Windows Settings).
+    """
+    # Check Run key exists
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_READ)
         winreg.QueryValueEx(key, _AUTOSTART_NAME)
         winreg.CloseKey(key)
-        return True
     except (FileNotFoundError, OSError):
         return False
+
+    # Check StartupApproved — if entry exists and first byte is 0x03, it's disabled
+    _STARTUP_APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _STARTUP_APPROVED_KEY, 0, winreg.KEY_READ,
+        )
+        value, _ = winreg.QueryValueEx(key, _AUTOSTART_NAME)
+        winreg.CloseKey(key)
+        if value[0] == 3:  # 0x03 = disabled by user via Task Manager
+            return False
+    except (FileNotFoundError, OSError):
+        pass  # No approved entry — treat as enabled (will be created on save)
+
+    return True
 
 
 def _set_autostart(enabled: bool) -> None:
     """Enable or disable Windows autostart for InputDNA.
 
+    Writes to both registry keys:
+    - HKCU\\...\\Run — the command to execute
+    - HKCU\\...\\StartupApproved\\Run — enabled/disabled flag (required by Windows 11)
+
     Adds --autostart flag so the app knows it was launched at boot
     (auto-login default user, auto-record, stay in tray).
     """
+    import struct
     import sys
     if getattr(sys, 'frozen', False):
         exe_path = f'"{sys.executable}" --autostart'
@@ -66,7 +90,27 @@ def _set_autostart(enabled: bool) -> None:
                 pass
         winreg.CloseKey(key)
     except OSError as e:
-        logger.error(f"Failed to set autostart: {e}")
+        logger.error(f"Failed to set autostart in Run key: {e}")
+        return
+
+    # Windows 11 requires StartupApproved\\Run entry to actually launch the app
+    _STARTUP_APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _STARTUP_APPROVED_KEY, 0, winreg.KEY_SET_VALUE,
+        )
+        if enabled:
+            # 0x02 = enabled, followed by 8 zero bytes (timestamp not needed for user entries)
+            approved_value = struct.pack("<3I", 2, 0, 0)
+            winreg.SetValueEx(key, _AUTOSTART_NAME, 0, winreg.REG_BINARY, approved_value)
+        else:
+            try:
+                winreg.DeleteValue(key, _AUTOSTART_NAME)
+            except FileNotFoundError:
+                pass
+        winreg.CloseKey(key)
+    except OSError as e:
+        logger.error(f"Failed to set StartupApproved: {e}")
 
 
 class GlobalSettingsDialog(QDialog):
