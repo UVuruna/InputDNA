@@ -123,11 +123,12 @@ def build_pyinstaller():
     if docs_dir.exists():
         for md_path in docs_dir.glob("*.md"):
             cmd.extend(["--add-data", f"{md_path};docs"])
-    # Bundle logo SVGs at original paths (for image rendering in docs)
+    # Bundle all logo SVGs at original paths (for image rendering in docs)
     for variant in ("dark", "light"):
-        svg = PROJECT_DIR / "support" / "logo" / variant / "UV-InputDNA.svg"
-        if svg.exists():
-            cmd.extend(["--add-data", f"{svg};support/logo/{variant}"])
+        logo_dir = PROJECT_DIR / "support" / "logo" / variant
+        if logo_dir.exists():
+            for svg in logo_dir.glob("*.svg"):
+                cmd.extend(["--add-data", f"{svg};support/logo/{variant}"])
 
     # Add hidden imports
     for mod in hidden_imports:
