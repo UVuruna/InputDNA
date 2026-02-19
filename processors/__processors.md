@@ -35,6 +35,29 @@ timeouts on sub-processors.
 records to the last completed movement's app-generated ID. When drag is first
 confirmed, explicitly ends any active movement session (`end_for_drag()`).
 
+**In-memory stats:** Maintains a `StatsTracker` instance with 19 named counters
+(mouse + keyboard). Stats are updated on every processed event and read by the
+dashboard timer. No database reads — all from RAM.
+
+**Keystroke classification:** Non-modifier keystrokes are classified into categories
+based on scan code and modifier state:
+
+| Category | Condition |
+|----------|-----------|
+| `upper_keys` | Letter scan code + (Shift XOR CapsLock) |
+| `lower_keys` | Letter scan code + not upper |
+| `code_keys` | Brackets, operators, punctuation (CODE_SCANS) |
+| `number_keys` | Number row (0-9) |
+| `numpad_keys` | Numpad scan codes |
+| `other_keys` | Everything else (space, enter, arrows, F-keys, shortcut keystrokes) |
+
+**Word counting:** State machine tracking text→whitespace transitions. When a
+non-modifier, non-whitespace key is followed by a whitespace key (Space, Tab,
+Enter), the "words" counter increments.
+
+**CapsLock tracking:** Initial state queried from OS via `GetKeyState(0x14)`,
+then toggled on scan code 0x3A press.
+
 ### `mouse_session.py` — Movement Session Detector
 
 Groups consecutive `RawMouseMove` events into movement sessions. A session
@@ -116,6 +139,18 @@ Processes keyboard events to produce three record types:
 | `"numpad"` | Numpad scan codes |
 | `"code"` | Brackets, operators, etc. |
 | `"text"` | Default — letters, spaces |
+
+**Exported scan code sets** (used by `EventProcessor` for keystroke classification):
+
+| Constant | Contents |
+|----------|----------|
+| `MODIFIER_SCANS` | Shift, Ctrl, Alt, Win scan codes |
+| `NUMPAD_SCANS` | Numpad 0-9, operators, dot, Enter |
+| `CODE_SCANS` | Brackets, operators, punctuation |
+| `LETTER_SCANS` | A-Z (QWERTY rows) |
+| `NUMBER_ROW_SCANS` | Number row 1-0 |
+| `WHITESPACE_SCANS` | Space, Tab, Enter, Numpad Enter |
+| `CAPSLOCK_SCAN` | CapsLock key (0x3A) |
 
 <a id="event-flow"></a>
 

@@ -187,6 +187,24 @@ Action buttons + status area. Shows current user info, recording
 status, model status, and system info panel. Home button (top-left)
 navigates to the login screen without stopping recording.
 
+**Recording Statistics** panel has two side-by-side group boxes:
+
+| Mouse | Keyboard |
+|-------|----------|
+| Movements | Keystrokes |
+| Clicks (Left / Right / Middle) | (Upper / Lower / Code) |
+| (Double / Triple / Spam) | (Number / Numpad / Other) |
+| Drags | Shortcuts |
+| Scrolls | Words |
+
+A shared navigation bar above the stats toggles between **Total** and
+**Last N min** views (left/right arrow buttons). N is read from
+`config.STATS_WINDOW_MINUTES` (per-user setting, default 30 min).
+
+Stats are updated via `update_stats(totals, windowed)` called from the
+main thread timer. Both arguments are `dict[str, int]` from `StatsTracker`.
+All data comes from RAM — no database reads.
+
 **System Info panel** displays live system data:
 
 | Field | Source | Example |
@@ -205,6 +223,9 @@ Per-user settings with recording config, DPI, and calibration.
 Reads current values from `config.*` on load, saves to `user_settings`
 table on Save. Emits `settings_changed_signal` when settings are saved
 and `calibrate_click_signal` / `calibrate_dpi_signal` for calibration dialogs.
+
+**Recording settings:** Downsampling, Session timeout, Min distance,
+DB max size, Stats window (10-60 min in 10-min increments).
 
 Global settings (data location, autostart) are NOT here — they are in
 `global_settings_dialog.py` accessible from the login screen.

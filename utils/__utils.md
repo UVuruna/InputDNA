@@ -14,6 +14,7 @@ functions with no state — any module can import and use them freely.
   🐍 timing.py
   🐍 keyboard_layout.py
   🐍 system_monitor.py
+  🐍 stats_tracker.py
 ```
 
 <a id="files"></a>
@@ -65,6 +66,23 @@ the same physical key regardless of which language layout is active
 | `get_position(scan_code)` | `tuple?` | `(row, col)` grid position |
 
 **Coverage:** Full alphanumeric, function keys, navigation cluster, arrow keys, numpad.
+
+### `stats_tracker.py` — In-Memory Stats Counters
+
+Tracks recording statistics in RAM for dashboard display. No database reads.
+Two classes:
+
+| Class | Purpose |
+|-------|---------|
+| `TimeWindowCounter` | Per-minute circular buffer (60 slots). Supports rolling window queries: "how many events in the last N minutes?" Fixed memory. |
+| `StatsTracker` | Named counters with both lifetime totals and per-minute windowed counts. Single writer (processor thread) + single reader (Qt timer thread), thread-safe under CPython GIL. |
+
+**Counter names managed by `EventProcessor`:**
+
+| Group | Counters |
+|-------|----------|
+| Mouse | `movements`, `clicks`, `left_clicks`, `right_clicks`, `middle_clicks`, `double_clicks`, `triple_clicks`, `spam_clicks`, `drags`, `scrolls` |
+| Keyboard | `keystrokes`, `upper_keys`, `lower_keys`, `code_keys`, `number_keys`, `numpad_keys`, `other_keys`, `shortcuts`, `words` |
 
 ### `system_monitor.py` — System State Monitor
 
