@@ -143,6 +143,10 @@ QWidget#status-bar {
     border-radius: 6px;
 }
 
+QWidget#status-bar QLabel {
+    background-color: transparent;
+}
+
 QLabel#status-text {
     font-size: 13px;
     color: $text_muted;
