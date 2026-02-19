@@ -192,10 +192,11 @@ class Recorder:
 class MainWindow(QMainWindow):
     """Main application window — manages screen transitions and recorder."""
 
-    # Cross-thread signals from tray icon (pystray runs in its own thread)
+    # Cross-thread signals (pystray and stop-worker run in their own threads)
     _sig_show_gui = Signal()
     _sig_stop_recording = Signal()
     _sig_force_close = Signal()
+    _sig_recording_stopped = Signal()
 
     # Screen indices in the stacked widget
     _LOGIN = 0
@@ -217,10 +218,11 @@ class MainWindow(QMainWindow):
         self._force_quit = False  # True when Quit from tray — bypass minimize
         self._system_shutting_down = False  # True on WM_QUERYENDSESSION
 
-        # Connect cross-thread signals (tray icon runs in pystray thread)
+        # Connect cross-thread signals (pystray and stop-worker threads)
         self._sig_show_gui.connect(self._show_window)
         self._sig_stop_recording.connect(self._stop_recording_from_tray)
         self._sig_force_close.connect(self._force_close)
+        self._sig_recording_stopped.connect(self._on_recording_stopped)
 
         # ── Stacked widget for screen navigation ──────────────
         self._stack = QStackedWidget()
@@ -420,8 +422,7 @@ class MainWindow(QMainWindow):
             if monitor:
                 monitor.stop()
             recorder.stop()
-            # Signal back to Qt thread
-            QTimer.singleShot(0, self._on_recording_stopped)
+            self._sig_recording_stopped.emit()
 
         threading.Thread(target=_do_stop, name="stop-worker", daemon=True).start()
 

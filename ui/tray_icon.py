@@ -136,6 +136,7 @@ class TrayIcon:
         if self._icon is not None:
             self._icon.icon = _icons["default"]
             self._icon.title = "InputDNA"
+            self._icon.update_menu()
 
     def set_recording(self):
         """Set icon to recording (green) state."""
@@ -143,6 +144,7 @@ class TrayIcon:
         if self._icon is not None:
             self._icon.icon = _icons["recording"]
             self._icon.title = "InputDNA — Recording"
+            self._icon.update_menu()
 
     def set_idle(self):
         """Set icon to idle (yellow) state — recording but no input activity."""
@@ -156,6 +158,7 @@ class TrayIcon:
         if self._icon is not None:
             self._icon.icon = _icons["stopped"]
             self._icon.title = "InputDNA — Not Recording"
+            self._icon.update_menu()
 
     def _show_gui(self, icon, item):
         """Default action (double-click) — open the GUI window."""

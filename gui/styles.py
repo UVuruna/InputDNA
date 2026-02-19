@@ -330,7 +330,10 @@ QPushButton#danger:hover {
     background-color: $danger_hover;
 }
 
-QPushButton:disabled {
+QPushButton:disabled,
+QPushButton#primary:disabled,
+QPushButton#success:disabled,
+QPushButton#danger:disabled {
     background-color: $disabled_bg;
     color: $disabled_text;
 }
