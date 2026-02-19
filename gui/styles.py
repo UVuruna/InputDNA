@@ -1,9 +1,10 @@
 """
 Theme system — dark and light palettes based on InputDNA SVG brand colors.
 
-Palette colors are extracted from support/logo/dark/UV-InputDNA.svg and
-support/logo/light/UV-InputDNA.svg. The accent magenta (#d83a95) and the
-teal-to-ice-blue gradient are the brand signature across both themes.
+Three brand color families from support/logo/*/UV-InputDNA.svg:
+  Pink   (#d83a95, #862065)  — text accents: titles, stats, results
+  Purple (#6371d7, #343d80)  — primary actions: buttons, checkboxes
+  Cyan   (#4cc4e4, #65cbe9)  — state feedback: focus, progress, sliders
 """
 
 from string import Template
@@ -14,79 +15,94 @@ from ui.tray_icon import detect_windows_theme
 
 DARK_PALETTE = {
     # Backgrounds (darkest SVG blues)
-    "bg":             "#031520",
-    "bg_alt":         "#082433",
-    "bg_button":      "#0f384d",
-    "bg_hover":       "#195370",
-    "bg_pressed":     "#000c14",
-    "border":         "#18526f",
-    # Accent (SVG magenta)
-    "accent":         "#d83a95",
-    "accent_hover":   "#e55aab",
-    "accent_pressed": "#862065",
-    # Focus ring (SVG cyan)
-    "focus":          "#4cc4e4",
+    "bg":               "#031520",
+    "bg_alt":           "#082433",
+    "bg_button":        "#0f384d",
+    "bg_hover":         "#195370",
+    "bg_pressed":       "#000c14",
+    "border":           "#18526f",
+    # Brand: Pink (text accents — titles, stats, results)
+    "accent":           "#d83a95",
+    "accent_hover":     "#e55aab",
+    "accent_pressed":   "#862065",
+    # Brand: Purple (primary action buttons, checkboxes, selections)
+    "primary":          "#6371d7",
+    "primary_hover":    "#7b87e0",
+    "primary_pressed":  "#343d80",
+    "primary_text":     "#eef7fe",
+    # Brand: Cyan (focus rings, progress bars, sliders)
+    "highlight":        "#4cc4e4",
+    "highlight_hover":  "#65cbe9",
     # Text (lightest SVG blues)
-    "text":           "#eef7fe",
-    "text_muted":     "#adcad9",
-    "text_dim":       "#6e9eb4",
-    "text_disabled":  "#3b7b97",
+    "text":             "#eef7fe",
+    "text_muted":       "#adcad9",
+    "text_dim":         "#6e9eb4",
+    "text_disabled":    "#3b7b97",
     # Button text
-    "btn_text":       "#eef7fe",
-    "accent_text":    "#eef7fe",
-    "success_text":   "#000000",
-    "danger_text":    "#eef7fe",
+    "btn_text":         "#eef7fe",
+    "success_text":     "#000000",
+    "danger_text":      "#eef7fe",
     # Status colors (standard)
-    "success":        "#22c55e",
-    "success_hover":  "#4ade80",
-    "danger":         "#ef4444",
-    "danger_hover":   "#f87171",
+    "success":          "#22c55e",
+    "success_hover":    "#4ade80",
+    "danger":           "#ef4444",
+    "danger_hover":     "#f87171",
     # Disabled
-    "disabled_bg":    "#1e2a50",
-    "disabled_text":  "#3b7b97",
+    "disabled_bg":      "#1e2a50",
+    "disabled_text":    "#3b7b97",
     # Combo arrow / subtle indicators
-    "indicator":      "#adcad9",
+    "indicator":        "#adcad9",
 }
 
 LIGHT_PALETTE = {
     # Backgrounds (lightest SVG blues)
-    "bg":             "#eef7fe",
-    "bg_alt":         "#e4f0f8",
-    "bg_button":      "#c5dae6",
-    "bg_hover":       "#adcad9",
-    "bg_pressed":     "#90b6c8",
-    "border":         "#adcad9",
-    # Accent (same SVG magenta)
-    "accent":         "#d83a95",
-    "accent_hover":   "#e55aab",
-    "accent_pressed": "#862065",
-    # Focus ring (deeper blue for contrast on light bg)
-    "focus":          "#0a5aa0",
+    "bg":               "#eef7fe",
+    "bg_alt":           "#e4f0f8",
+    "bg_button":        "#c5dae6",
+    "bg_hover":         "#adcad9",
+    "bg_pressed":       "#90b6c8",
+    "border":           "#adcad9",
+    # Brand: Pink (text accents)
+    "accent":           "#d83a95",
+    "accent_hover":     "#e55aab",
+    "accent_pressed":   "#862065",
+    # Brand: Purple (primary action buttons)
+    "primary":          "#6371d7",
+    "primary_hover":    "#7b87e0",
+    "primary_pressed":  "#343d80",
+    "primary_text":     "#eef7fe",
+    # Brand: Cyan/Blue (focus, progress — darker shade for contrast)
+    "highlight":        "#0a5aa0",
+    "highlight_hover":  "#4cc4e4",
     # Text (darkest SVG blues)
-    "text":           "#031520",
-    "text_muted":     "#0f384d",
-    "text_dim":       "#47839d",
-    "text_disabled":  "#90b6c8",
+    "text":             "#031520",
+    "text_muted":       "#0f384d",
+    "text_dim":         "#47839d",
+    "text_disabled":    "#90b6c8",
     # Button text
-    "btn_text":       "#031520",
-    "accent_text":    "#eef7fe",
-    "success_text":   "#000000",
-    "danger_text":    "#eef7fe",
+    "btn_text":         "#031520",
+    "success_text":     "#000000",
+    "danger_text":      "#eef7fe",
     # Status colors (same)
-    "success":        "#22c55e",
-    "success_hover":  "#4ade80",
-    "danger":         "#ef4444",
-    "danger_hover":   "#f87171",
+    "success":          "#22c55e",
+    "success_hover":    "#4ade80",
+    "danger":           "#ef4444",
+    "danger_hover":     "#f87171",
     # Disabled
-    "disabled_bg":    "#d7e7f1",
-    "disabled_text":  "#90b6c8",
+    "disabled_bg":      "#d7e7f1",
+    "disabled_text":    "#90b6c8",
     # Combo arrow / subtle indicators
-    "indicator":      "#47839d",
+    "indicator":        "#47839d",
 }
 
 
 # ── QSS template ──────────────────────────────────────────────
 # Uses $variable substitution from the palette dicts above.
+#
+# Color mapping:
+#   $accent*    → Pink  — text accents (titles, stat labels, results)
+#   $primary*   → Purple — primary buttons, checkboxes, calendar selection
+#   $highlight* → Cyan  — focus borders, progress bars, sliders, combo hover
 
 _QSS_TEMPLATE = Template("""
 /* ── Base ──────────────────────────────────────────────────── */
@@ -130,7 +146,7 @@ QLabel#status-recording {
     border-radius: 6px;
 }
 
-/* ── Stat/info labels (migrated from inline styles) ───────── */
+/* ── Stat/info labels (Pink accent) ──────────────────────── */
 QLabel#stat-value {
     font-size: 18px;
     font-weight: bold;
@@ -197,7 +213,7 @@ QLabel#drag-area {
     border-radius: 6px;
 }
 
-/* ── Inputs ───────────────────────────────────────────────── */
+/* ── Inputs (Cyan focus) ─────────────────────────────────── */
 QLineEdit, QDateEdit {
     background-color: $bg_alt;
     color: $text;
@@ -212,10 +228,10 @@ QDateEdit {
 }
 
 QLineEdit:focus, QDateEdit:focus {
-    border: 1px solid $focus;
+    border: 1px solid $highlight;
 }
 
-/* ── Buttons ──────────────────────────────────────────────── */
+/* ── Buttons (Purple primary) ────────────────────────────── */
 QPushButton {
     background-color: $bg_button;
     color: $btn_text;
@@ -236,16 +252,16 @@ QPushButton:pressed {
 }
 
 QPushButton#primary {
-    background-color: $accent;
-    color: $accent_text;
+    background-color: $primary;
+    color: $primary_text;
 }
 
 QPushButton#primary:hover {
-    background-color: $accent_hover;
+    background-color: $primary_hover;
 }
 
 QPushButton#primary:pressed {
-    background-color: $accent_pressed;
+    background-color: $primary_pressed;
 }
 
 QPushButton#success {
@@ -308,7 +324,7 @@ QGroupBox::title {
     padding: 0 5px;
 }
 
-/* ── Progress bar ─────────────────────────────────────────── */
+/* ── Progress bar (Cyan) ─────────────────────────────────── */
 QProgressBar {
     border: 1px solid $border;
     border-radius: 6px;
@@ -319,11 +335,11 @@ QProgressBar {
 }
 
 QProgressBar::chunk {
-    background-color: $accent;
+    background-color: $highlight;
     border-radius: 5px;
 }
 
-/* ── Combo box ────────────────────────────────────────────── */
+/* ── Combo box (Cyan hover) ──────────────────────────────── */
 QComboBox {
     background-color: $bg_alt;
     color: $text;
@@ -335,7 +351,7 @@ QComboBox {
 }
 
 QComboBox:hover {
-    border: 1px solid $accent;
+    border: 1px solid $highlight;
 }
 
 QComboBox::drop-down {
@@ -359,7 +375,7 @@ QComboBox QAbstractItemView {
     border: 1px solid $border;
 }
 
-/* ── Slider ───────────────────────────────────────────────── */
+/* ── Slider (Cyan) ───────────────────────────────────────── */
 QSlider::groove:horizontal {
     border: none;
     height: 6px;
@@ -368,7 +384,7 @@ QSlider::groove:horizontal {
 }
 
 QSlider::handle:horizontal {
-    background-color: $accent;
+    background-color: $highlight;
     width: 16px;
     height: 16px;
     margin: -5px 0;
@@ -376,15 +392,15 @@ QSlider::handle:horizontal {
 }
 
 QSlider::handle:horizontal:hover {
-    background-color: $accent_hover;
+    background-color: $highlight_hover;
 }
 
 QSlider::sub-page:horizontal {
-    background-color: $accent;
+    background-color: $highlight;
     border-radius: 3px;
 }
 
-/* ── Spin boxes ───────────────────────────────────────────── */
+/* ── Spin boxes (Cyan focus) ─────────────────────────────── */
 QSpinBox, QDoubleSpinBox {
     background-color: $bg_alt;
     color: $text;
@@ -395,7 +411,7 @@ QSpinBox, QDoubleSpinBox {
 }
 
 QSpinBox:focus, QDoubleSpinBox:focus {
-    border: 1px solid $focus;
+    border: 1px solid $highlight;
 }
 
 QSpinBox::up-button, QSpinBox::down-button,
@@ -410,7 +426,7 @@ QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {
     background-color: $bg_hover;
 }
 
-/* ── Checkbox ─────────────────────────────────────────────── */
+/* ── Checkbox (Purple) ───────────────────────────────────── */
 QCheckBox {
     spacing: 8px;
     color: $text;
@@ -426,15 +442,15 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: $accent;
-    border-color: $accent;
+    background-color: $primary;
+    border-color: $primary;
 }
 
 QCheckBox::indicator:hover {
-    border-color: $accent;
+    border-color: $highlight;
 }
 
-/* ── Key sequence edit ────────────────────────────────────── */
+/* ── Key sequence edit (Cyan focus) ──────────────────────── */
 QKeySequenceEdit {
     background-color: $bg_alt;
     color: $text;
@@ -445,7 +461,7 @@ QKeySequenceEdit {
 }
 
 QKeySequenceEdit:focus {
-    border: 1px solid $focus;
+    border: 1px solid $highlight;
 }
 
 /* ── Button focus indicator removal ───────────────────────── */
@@ -469,7 +485,7 @@ QPushButton#danger:focus {
     outline: none;
 }
 
-/* ── Calendar popup (QDateEdit) ───────────────────────────── */
+/* ── Calendar popup (Purple selection) ───────────────────── */
 QCalendarWidget {
     background-color: $bg;
     color: $text;
@@ -504,8 +520,8 @@ QCalendarWidget QSpinBox {
     border-radius: 4px;
     padding: 2px 6px;
     font-size: 14px;
-    selection-background-color: $accent;
-    selection-color: $accent_text;
+    selection-background-color: $primary;
+    selection-color: $primary_text;
 }
 
 QCalendarWidget QSpinBox::up-button,
@@ -534,8 +550,8 @@ QCalendarWidget QMenu::item:selected {
 QCalendarWidget QAbstractItemView {
     background-color: $bg;
     color: $text;
-    selection-background-color: $accent;
-    selection-color: $accent_text;
+    selection-background-color: $primary;
+    selection-color: $primary_text;
     border: 1px solid $border;
     outline: none;
 }
