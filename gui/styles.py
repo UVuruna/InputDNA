@@ -170,12 +170,12 @@ QLabel#stat-value {
 }
 
 QLabel#stat-sub-label {
-    font-size: 12px;
+    font-size: 14px;
     color: $text_dim;
 }
 
 QLabel#stat-sub-value {
-    font-size: 13px;
+    font-size: 18px;
     font-weight: bold;
     color: $accent;
 }
@@ -610,6 +610,20 @@ QCalendarWidget QAbstractItemView:enabled {
 
 QCalendarWidget QAbstractItemView:disabled {
     color: $text_disabled;
+}
+
+/* ── Readme viewer ───────────────────────────────────────── */
+QWidget#readme-nav {
+    background-color: $bg_alt;
+    border-bottom: 1px solid $border;
+}
+
+QWidget#readme-nav QLabel {
+    background-color: transparent;
+}
+
+QWebEngineView {
+    border: none;
 }
 
 /* ── Scroll area ──────────────────────────────────────────── */

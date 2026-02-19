@@ -37,6 +37,9 @@ class LoginScreen(QWidget):
     # Emitted when user clicks "Back to Dashboard" (while logged in)
     back_to_dashboard = Signal()
 
+    # Emitted when user clicks "Readme" button
+    readme_signal = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._active_user: UserProfile | None = None
@@ -64,6 +67,12 @@ class LoginScreen(QWidget):
         self._back_btn.setVisible(False)
         top_row.addWidget(self._back_btn)
         top_row.addStretch()
+
+        readme_btn = QPushButton("Readme")
+        readme_btn.setToolTip("Browse project documentation")
+        readme_btn.clicked.connect(self.readme_signal.emit)
+        top_row.addWidget(readme_btn)
+
         layout.addLayout(top_row)
 
         # Title

@@ -407,6 +407,7 @@ python setup/build.py
 | `pystray` | >=0.19.5 | System tray icon |
 | `Pillow` | >=10.0 | Required by pystray |
 | `PySide6` | >=6.5 | Desktop GUI (login, dashboard, settings) |
+| `Markdown` | >=3.4 | Documentation viewer (markdown → HTML rendering) |
 
 > **Note:** No numpy, no pywin32. Distance and math use `math.sqrt`, `math.atan2` from stdlib.
 

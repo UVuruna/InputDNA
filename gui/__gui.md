@@ -17,6 +17,7 @@ PySide6 desktop GUI for the Human Input Recorder.
   🐍 global_settings_dialog.py
   🐍 login_screen.py
   🐍 main_dashboard.py
+  🐍 readme_viewer.py
   🐍 settings_screen.py
   🐍 validation_screen.py
   🐍 styles.py
@@ -33,6 +34,7 @@ flowchart LR
     START((Start)) --> LOGIN[Login / Register Screen]
     LOGIN -- "existing user" --> DASH[Main Dashboard]
     LOGIN -- "new user" --> REG[Register Form]
+    LOGIN -- "Readme" --> README[Documentation Viewer]
     REG --> DASH
 
     DASH -- "Home" --> LOGIN
@@ -72,6 +74,9 @@ to return to the active session.
 
 A **Settings** button (bottom-right) opens the Global Settings dialog for
 application-wide options (default user, autostart, minimize on close, etc.).
+
+A **Readme** button (top-right, always visible) opens the documentation
+viewer showing README.md with clickable links to all project docs.
 
 ### Screen 2: Main Dashboard
 
@@ -179,7 +184,7 @@ When navigated to via the Home button (while a user is logged in):
   tray icon + status text)
 - Registration of new users still works
 
-Signals: `login_success(UserProfile)`, `back_to_dashboard`.
+Signals: `login_success(UserProfile)`, `back_to_dashboard`, `readme_signal`.
 
 ### `main_dashboard.py` — Main Control Panel
 
@@ -217,6 +222,25 @@ All data comes from RAM — no database reads.
 
 Updated via `update_system_info()` method called from the application layer.
 
+### `readme_viewer.py` — Documentation Viewer
+
+Full-screen widget for browsing project `.md` files. Accessible from
+the login screen via the Readme button (top-right). Uses QWebEngineView
+(Chromium) with Python's `markdown` library (tables, fenced_code, toc
+extensions) for rendering. Mermaid diagrams rendered via CDN.
+
+**Navigation bar:** ← Back (return to login), ◀/▶ (file history
+back/forward), file path label, Home (reset to README.md).
+
+**Link handling:** Internal `.md` links load in the viewer. External
+URLs open in the system browser. Fragment links (`#section`) scroll
+within the document.
+
+**Theme:** HTML/CSS generated at render time from the active palette
+(`DARK_PALETTE` / `LIGHT_PALETTE`), matching the application theme.
+
+Signal: `back_signal` (return to login screen).
+
 ### `settings_screen.py` — Per-User Settings Page
 
 Per-user settings with recording config, DPI, and calibration.
@@ -250,7 +274,7 @@ extracted from the InputDNA SVG brand logos (`support/logo/dark/` and
 **Object name selectors** (used by other GUI files instead of inline styles):
 `#stat-value`, `#info-value`, `#hint`, `#hint-small`, `#hint-dim`,
 `#result-value`, `#result-value-large`, `#score-value`, `#count-value`,
-`#log-area`, `#drag-area`.
+`#log-area`, `#drag-area`, `#readme-nav`.
 
 All widget types covered: buttons, inputs, combos, sliders, spinboxes,
 checkboxes, tabs, group boxes, progress bars, calendar, and key sequence editors.
