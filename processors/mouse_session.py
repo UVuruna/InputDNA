@@ -115,7 +115,7 @@ class MouseSessionDetector:
     def flush(self):
         """Force-end current session (e.g., on shutdown)."""
         if self._active and self._points:
-            self._end_session("flush")
+            self._end_session("recording_stopped")
 
     def _end_session(self, end_event: str):
         """Finalize current session and emit it."""
