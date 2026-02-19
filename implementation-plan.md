@@ -1,4 +1,7 @@
-# Implementation Plan — Human Input Recorder v2
+# Implementation Plan — InputDNA (UVirtual)
+
+> **InputDNA** is the first DNA module in the [UVirtual](README.md) ecosystem.
+> It records personalized mouse and keyboard input patterns.
 
 ## Changes from v1
 

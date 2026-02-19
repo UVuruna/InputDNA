@@ -1,10 +1,11 @@
 """
 System tray icon for recording status.
 
-Shows custom InputDNA logos in the taskbar notification area:
-  InputDNA-working.png  = recording
-  InputDNA-paused.png   = paused
-  InputDNA-stopped.png  = stopped / error
+Shows custom InputDNA logos in the taskbar notification area.
+Icons are loaded from light/ or dark/ subfolder based on Windows theme:
+  {theme}/InputDNA-start.png  = recording
+  {theme}/InputDNA-pause.png  = paused
+  {theme}/InputDNA-stop.png   = stopped / error
 
 Right-click menu: Pause/Resume, Stats, Quit.
 
@@ -13,6 +14,7 @@ platforms, so TrayIcon.run() is a blocking call.
 """
 
 import logging
+import winreg
 from pathlib import Path
 from typing import Callable, Optional
 from PIL import Image
@@ -22,17 +24,39 @@ logger = logging.getLogger(__name__)
 
 _UI_DIR = Path(__file__).parent
 
-
-def _load_icon(filename: str) -> Image.Image:
-    """Load a PNG icon from the ui/ directory."""
-    path = _UI_DIR / filename
-    return Image.open(path)
+_THEME_REG_PATH = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+_THEME_REG_VALUE = "SystemUsesLightTheme"
 
 
-# Pre-load icons
-_ICON_RECORDING = _load_icon("InputDNA-working.png")
-_ICON_PAUSED = _load_icon("InputDNA-paused.png")
-_ICON_STOPPED = _load_icon("InputDNA-stopped.png")
+def _detect_windows_theme() -> str:
+    """Detect Windows taskbar theme from registry.
+
+    Returns 'light' or 'dark'. Defaults to 'dark' if detection fails.
+    """
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _THEME_REG_PATH)
+        value, _ = winreg.QueryValueEx(key, _THEME_REG_VALUE)
+        winreg.CloseKey(key)
+        return "light" if value == 1 else "dark"
+    except OSError:
+        logger.warning("Could not detect Windows theme, defaulting to dark")
+        return "dark"
+
+
+def _load_themed_icons() -> dict[str, Image.Image]:
+    """Load all tray icons from the theme-appropriate subfolder."""
+    theme = _detect_windows_theme()
+    theme_dir = _UI_DIR / theme
+    logger.info(f"Loading tray icons from ui/{theme}/")
+    return {
+        "recording": Image.open(theme_dir / "InputDNA-start.png"),
+        "paused": Image.open(theme_dir / "InputDNA-pause.png"),
+        "stopped": Image.open(theme_dir / "InputDNA-stop.png"),
+    }
+
+
+# Pre-load icons based on current Windows theme
+_icons = _load_themed_icons()
 
 
 class TrayIcon:
@@ -78,7 +102,7 @@ class TrayIcon:
 
         self._icon = pystray.Icon(
             name="InputRecorder",
-            icon=_ICON_RECORDING,
+            icon=_icons["recording"],
             title="Input Recorder — Recording",
             menu=menu,
         )
@@ -91,16 +115,16 @@ class TrayIcon:
         self._paused = paused
         if self._icon is not None:
             if paused:
-                self._icon.icon = _ICON_PAUSED
+                self._icon.icon = _icons["paused"]
                 self._icon.title = "Input Recorder — Paused"
             else:
-                self._icon.icon = _ICON_RECORDING
+                self._icon.icon = _icons["recording"]
                 self._icon.title = "Input Recorder — Recording"
 
     def set_stopped(self):
         """Update icon to stopped state."""
         if self._icon is not None:
-            self._icon.icon = _ICON_STOPPED
+            self._icon.icon = _icons["stopped"]
             self._icon.title = "Input Recorder — Stopped"
 
     def _toggle(self, icon, item):

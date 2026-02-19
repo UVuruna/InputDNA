@@ -6,9 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## PROJECT OVERVIEW
 
-**Personalized PC Behavior** is a system for recording, learning, and replaying personalized human input patterns. It captures how YOU specifically move the mouse and type on the keyboard, trains ML models on that data, and can replay your behavior indistinguishably from the real thing.
+**UVirtual** (UV) is an AI platform that builds a complete virtual replica of a user. It captures, learns, and reproduces unique behavioral patterns across multiple domains. Each DNA module records a specific dimension of behavior, and together they form a digital fingerprint so faithful it crosses the uncanny valley.
 
-**Project Phases:**
+**DNA Modules:**
+
+| Module | Domain | Hardware | Status |
+|--------|--------|----------|--------|
+| **InputDNA** | Mouse & keyboard behavior | — | Active (this repo) |
+| **VoiceDNA** | Speech rhythm, tone, pauses | Microphone | Planned |
+| **GamingDNA** | Reflexes, strategy, play style | Per-game | Planned |
+| **ExpressionDNA** | Facial expressions, emotions | Camera | Planned |
+| **MotionDNA** | Body movement, gestures | Multiple cameras | Planned |
+| **UV Avatar** | Virtual twin from all DNA modules | — | Future |
+
+**This repository is InputDNA** — the first and currently active DNA module. It records how YOU specifically move the mouse and type on the keyboard, trains ML models on that data, and can replay your behavior indistinguishably from the real thing.
+
+**InputDNA Phases:**
 ```
 Phase 1: Recorder (Current Focus)
     └── Capture raw mouse + keyboard input → SQLite
@@ -29,7 +42,7 @@ Phase 4: Replay Engine (Future)
 
 **Key Documentation:**
 - [implementation-plan.md](implementation-plan.md) — Full system design, schema, file descriptions
-- [README.md](README.md) — Project overview, document index, quick start
+- [README.md](README.md) — Project overview, UVirtual ecosystem, document index, quick start
 - [docs/](docs/) — 7 detailed specification documents (mouse, keyboard, ML, replay, etc.)
 
 **Folder Docs (MUST READ before modifying a module):**

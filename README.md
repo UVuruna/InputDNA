@@ -1,40 +1,119 @@
 <p align="center">
-  <img src="support/logo/Uncanny Valley.svg" alt="Uncanny Valley" width="300">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="support/logo/dark/UVirtual.svg">
+    <source media="(prefers-color-scheme: light)" srcset="support/logo/light/UVirtual.svg">
+    <img src="support/logo/light/UVirtual.svg" alt="UVirtual" width="300">
+  </picture>
 </p>
 
-# Uncanny Valley
+# UVirtual
 
-**Uncanny Valley** is a suite of AI projects that learn and replicate individual human behavior across different domains — input, speech, gaming, and more. Each sub-project builds a personal behavioral model so faithful that the output crosses the uncanny valley, becoming indistinguishable from the real person.
+**UVirtual** (UV) is an AI platform that builds a complete virtual replica of YOU. It captures, learns, and reproduces your unique behavioral patterns across multiple domains — how you move the mouse, type on the keyboard, speak, play games, express emotions, and move your body. Each DNA module records a specific dimension of your behavior, and together they form a digital fingerprint so faithful it crosses the uncanny valley.
 
-### Sub-Projects
+The end goal: a **UV Avatar** — a virtual character that IS you, assembled from all your DNA modules, usable in games, virtual worlds, and any environment that needs an authentic digital twin.
+
+### DNA Modules
 
 <table>
   <tr>
-    <td align="center" width="200"><img src="support/logo/InputDNA.svg" alt="InputDNA" width="100"><br><b>InputDNA</b></td>
-    <td>Mouse movement, keyboard typing, click behavior</td>
-    <td><b>Active</b></td>
+    <td align="center" width="160">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="support/logo/dark/UV-InputDNA.svg">
+        <source media="(prefers-color-scheme: light)" srcset="support/logo/light/UV-InputDNA.svg">
+        <img src="support/logo/light/UV-InputDNA.svg" alt="InputDNA" width="100">
+      </picture><br><b>InputDNA</b>
+    </td>
+    <td><b>Mouse &amp; Keyboard Behavior</b><br>Records how you move the mouse (path shapes, speed profiles, micro-jitter, click hesitation) and type on the keyboard (digraph timing, key hold duration, typing rhythm, shortcuts). Builds a personal input fingerprint from 20-40 hours of normal PC use.</td>
+    <td width="80"><b>Active</b></td>
   </tr>
   <tr>
-    <td align="center" width="200"><img src="support/logo/VoiceDNA.svg" alt="VoiceDNA" width="100"><br><b>VoiceDNA</b></td>
-    <td>Voice patterns, speech rhythm, intonation</td>
-    <td>Planned</td>
+    <td align="center" width="160">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="support/logo/dark/UV-VoiceDNA.svg">
+        <source media="(prefers-color-scheme: light)" srcset="support/logo/light/UV-VoiceDNA.svg">
+        <img src="support/logo/light/UV-VoiceDNA.svg" alt="VoiceDNA" width="100">
+      </picture><br><b>VoiceDNA</b>
+    </td>
+    <td><b>Voice &amp; Speech Patterns</b><br>Learns your vocal identity — speech rhythm, pauses between words, intonation curves, tone variations, speaking tempo, and accent characteristics. Captures the way YOU speak, not just what you say. Requires microphone.</td>
+    <td width="80">Planned</td>
   </tr>
   <tr>
-    <td align="center" width="200"><img src="support/logo/GamingDNA.svg" alt="GamingDNA" width="100"><br><b>GamingDNA</b></td>
-    <td>Gaming input patterns, reaction times, strategies</td>
-    <td>Planned</td>
+    <td align="center" width="160">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="support/logo/dark/UV-GamingDNA.svg">
+        <source media="(prefers-color-scheme: light)" srcset="support/logo/light/UV-GamingDNA.svg">
+        <img src="support/logo/light/UV-GamingDNA.svg" alt="GamingDNA" width="100">
+      </picture><br><b>GamingDNA</b>
+    </td>
+    <td><b>Gaming Behavior &amp; Play Style</b><br>Records game-specific behavioral patterns — reaction times, decision-making speed, strategic choices, fear responses, aggression levels, risk tolerance, and overall play style. Each game gets its own profile because you play differently in an FPS vs. a strategy game.</td>
+    <td width="80">Planned</td>
+  </tr>
+  <tr>
+    <td align="center" width="160">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="support/logo/dark/UV-ExpressionDNA.svg">
+        <source media="(prefers-color-scheme: light)" srcset="support/logo/light/UV-ExpressionDNA.svg">
+        <img src="support/logo/light/UV-ExpressionDNA.svg" alt="ExpressionDNA" width="100">
+      </picture><br><b>ExpressionDNA</b>
+    </td>
+    <td><b>Facial Expressions &amp; Emotions</b><br>Captures your unique facial expressions for each emotional state — how YOU specifically smile, frown, show surprise, concentrate, or react. Maps the micro-movements and muscle patterns that make your expressions distinctly yours. Requires camera.</td>
+    <td width="80">Planned</td>
+  </tr>
+  <tr>
+    <td align="center" width="160">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="support/logo/dark/UV-MotionDNA.svg">
+        <source media="(prefers-color-scheme: light)" srcset="support/logo/light/UV-MotionDNA.svg">
+        <img src="support/logo/light/UV-MotionDNA.svg" alt="MotionDNA" width="100">
+      </picture><br><b>MotionDNA</b>
+    </td>
+    <td><b>Body Movement &amp; Gestures</b><br>Learns your physical movement patterns — posture, gait, hand gestures, head movements, and body language. Captures the way you move in 3D space, from subtle fidgeting to full-body motion. Requires multiple cameras.</td>
+    <td width="80">Planned</td>
+  </tr>
+  <tr>
+    <td align="center" width="160">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="support/logo/dark/UV-Avatar.svg">
+        <source media="(prefers-color-scheme: light)" srcset="support/logo/light/UV-Avatar.svg">
+        <img src="support/logo/light/UV-Avatar.svg" alt="UV Avatar" width="100">
+      </picture><br><b>UV Avatar</b>
+    </td>
+    <td><b>Your Virtual Twin</b><br>The culmination of all DNA modules. Like a character creator in a game, except instead of designing a fictional character, you build one that IS you — assembled from your InputDNA, VoiceDNA, GamingDNA, ExpressionDNA, and MotionDNA. Deploy your avatar as an NPC, a game character, or a digital twin in any virtual world.</td>
+    <td width="80">Future</td>
   </tr>
 </table>
+
+### How It All Connects
+
+```mermaid
+flowchart TB
+    INPUT["InputDNA<br>Mouse &amp; Keyboard"]
+    VOICE["VoiceDNA<br>Speech &amp; Voice"]
+    GAMING["GamingDNA<br>Play Style"]
+    EXPRESSION["ExpressionDNA<br>Facial Expressions"]
+    MOTION["MotionDNA<br>Body Movement"]
+    AVATAR["UV Avatar<br>Your Virtual Twin"]
+
+    INPUT --> AVATAR
+    VOICE --> AVATAR
+    GAMING --> AVATAR
+    EXPRESSION --> AVATAR
+    MOTION --> AVATAR
+```
 
 ---
 
 <p align="center">
-  <img src="support/logo/InputDNA.svg" alt="InputDNA" width="200">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="support/logo/dark/UV-InputDNA.svg">
+    <source media="(prefers-color-scheme: light)" srcset="support/logo/light/UV-InputDNA.svg">
+    <img src="support/logo/light/UV-InputDNA.svg" alt="InputDNA" width="200">
+  </picture>
 </p>
 
 # InputDNA
 
-A machine learning-based system for recording, learning, and replaying personalized human-like mouse and keyboard input patterns.
+A machine learning-based system for recording, learning, and replaying personalized human-like mouse and keyboard input patterns. The first and currently active DNA module in the UVirtual ecosystem.
 
 ## Overview
 
@@ -110,9 +189,9 @@ flowchart LR
     🐍 system_monitor.py              Mouse speed, resolution, layout tracking
   📁 ui/                              System tray interface
     🐍 tray_icon.py                   pystray: green/yellow/red status
-    🖼️ InputDNA-working.png           Tray icon (recording)
-    🖼️ InputDNA-paused.png            Tray icon (paused)
-    🖼️ InputDNA-stopped.png           Tray icon (stopped)
+    🖼️ InputDNA-start.png             Tray icon (recording)
+    🖼️ InputDNA-pause.png             Tray icon (paused)
+    🖼️ InputDNA-stop.png              Tray icon (stopped)
   📁 gui/                             PySide6 desktop application
     🐍 login_screen.py                User login/register
     🐍 main_dashboard.py              Record / Train / Validate controls

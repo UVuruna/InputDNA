@@ -13,9 +13,14 @@ background with just a tray icon.
   📝 __ui.md
   🐍 __init__.py
   🐍 tray_icon.py
-  🖼️ InputDNA-working.png
-  🖼️ InputDNA-paused.png
-  🖼️ InputDNA-stopped.png
+  📁 light/                              Icons for light Windows theme
+    🖼️ InputDNA-start.png
+    🖼️ InputDNA-pause.png
+    🖼️ InputDNA-stop.png
+  📁 dark/                               Icons for dark Windows theme
+    🖼️ InputDNA-start.png
+    🖼️ InputDNA-pause.png
+    🖼️ InputDNA-stop.png
 ```
 
 <a id="files"></a>
@@ -25,19 +30,30 @@ background with just a tray icon.
 ### `tray_icon.py` — System Tray Icon & Menu
 
 Uses `pystray` + `Pillow` to show custom InputDNA logos in the Windows
-notification area (system tray). Icons are loaded from PNG files in this folder.
+notification area (system tray). Icons are loaded from `light/` or `dark/`
+subfolder based on the current Windows theme.
+
+**Theme detection:** Reads `SystemUsesLightTheme` from the Windows registry
+(`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize`).
+Theme is detected once at startup.
 
 **Icon states:**
 
-| Preview | File | State |
-|---------|------|-------|
-| <img src="InputDNA-working.png" alt="Working" width="32"> | `InputDNA-working.png` | Actively recording |
-| <img src="InputDNA-paused.png" alt="Paused" width="32"> | `InputDNA-paused.png` | Paused (via hotkey or menu) |
-| <img src="InputDNA-stopped.png" alt="Stopped" width="32"> | `InputDNA-stopped.png` | Stopped or error |
+| State | File | Description |
+|-------|------|-------------|
+| Recording | `{theme}/InputDNA-start.png` | Actively recording input |
+| Paused | `{theme}/InputDNA-pause.png` | Paused (via hotkey or menu) |
+| Stopped | `{theme}/InputDNA-stop.png` | Stopped or error |
 
-### `InputDNA-working.png` / `InputDNA-paused.png` / `InputDNA-stopped.png` — Tray Icons
+### `light/` / `dark/` — Theme Icon Folders
 
 256x256 PNG icons exported from the SVG sources in `support/logo/`.
+Each folder contains the same three icons with colors optimized for
+the respective Windows taskbar background:
+
+- **light/** — dark outlines/shadows, visible on light taskbar
+- **dark/** — light outlines/shadows, visible on dark taskbar
+
 Loaded at startup by `tray_icon.py` via Pillow. pystray handles
 resizing to the appropriate system tray size (16-32px depending on DPI).
 
@@ -83,9 +99,9 @@ distracting and unnecessary — all you need to know is:
 
 | Question | Answer |
 |----------|--------|
-| Is it recording? | <img src="InputDNA-working.png" alt="Working" width="16"> Working icon |
-| Is it paused? | <img src="InputDNA-paused.png" alt="Paused" width="16"> Paused icon |
-| Is it stopped? | <img src="InputDNA-stopped.png" alt="Stopped" width="16"> Stopped icon |
+| Is it recording? | Green mouse icon (start) |
+| Is it paused? | Yellow mouse icon (pause) |
+| Is it stopped? | Red mouse icon (stop) |
 | How much data so far? | Stats menu → toast notification |
 | How to pause/stop? | Right-click menu or `Ctrl+Alt+R` |
 

@@ -135,7 +135,12 @@ class _RawMouseAccumulator(QAbstractNativeEventFilter):
         raw = _RAWINPUT.from_buffer_copy(buf)
         # Only accumulate relative mouse moves (usFlags bit 0 = MOUSE_MOVE_ABSOLUTE)
         if raw.header.dwType == RIM_TYPEMOUSE and (raw.mouse.usFlags & 0x01) == 0:
-            self._dx_sum += abs(raw.mouse.lLastX)
+            self._dx_sum += raw.mouse.lLastX
+
+    @property
+    def current_count(self) -> int:
+        """Current net raw X displacement (abs of signed sum)."""
+        return abs(self._dx_sum)
 
     def start(self):
         """Start accumulating raw X deltas."""
@@ -143,9 +148,9 @@ class _RawMouseAccumulator(QAbstractNativeEventFilter):
         self._capturing = True
 
     def stop(self) -> int:
-        """Stop accumulating, return total raw X counts."""
+        """Stop accumulating, return net raw X displacement."""
         self._capturing = False
-        return self._dx_sum
+        return abs(self._dx_sum)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -161,32 +166,51 @@ class _MeasurementArea(QLabel):
     Visual markers show drag start/end positions.
     """
 
-    def __init__(self, accumulator: _RawMouseAccumulator, parent=None):
+    def __init__(self, accumulator: _RawMouseAccumulator, distance_spin: QDoubleSpinBox, parent=None):
         super().__init__(parent)
         self._acc = accumulator
+        self._distance_spin = distance_spin
+        self._dragging = False
         self.setMinimumHeight(120)
         self.setStyleSheet(
             "background-color: #16213e; border: 1px solid #0f3460; border-radius: 6px;"
         )
         self.setAlignment(Qt.AlignCenter)
+        self.setMouseTracking(True)
         self.setText("Press and drag horizontally across your reference distance")
         self._start_x: float | None = None
         self._end_x: float | None = None
         self._raw_counts: int | None = None
 
+    def _calc_live_dpi(self, counts: int) -> int:
+        """Calculate DPI from current counts and distance spin value."""
+        distance_inches = self._distance_spin.value() / 2.54
+        if distance_inches > 0 and counts > 0:
+            return round(counts / distance_inches)
+        return 0
+
     def mousePressEvent(self, event):
         self._start_x = event.position().x()
         self._end_x = None
         self._raw_counts = None
+        self._dragging = True
         self._acc.start()
-        self.setText("Dragging — release at the end")
+        self.setText("0 DPI  (0 raw counts)")
         self.update()
+
+    def mouseMoveEvent(self, event):
+        if self._dragging:
+            counts = self._acc.current_count
+            dpi = self._calc_live_dpi(counts)
+            self.setText(f"{dpi} DPI  ({counts} raw counts)")
 
     def mouseReleaseEvent(self, event):
         if self._start_x is not None:
             self._end_x = event.position().x()
+            self._dragging = False
             self._raw_counts = self._acc.stop()
-            self.setText(f"Measured: {self._raw_counts} raw counts")
+            dpi = self._calc_live_dpi(self._raw_counts)
+            self.setText(f"{dpi} DPI  ({self._raw_counts} raw counts)")
             self.update()
 
     def paintEvent(self, event):
@@ -274,7 +298,7 @@ class DpiMeasurementDialog(QDialog):
 
         # Measurement area
         layout.addWidget(QLabel("Drag here:"))
-        self._area = _MeasurementArea(self._accumulator)
+        self._area = _MeasurementArea(self._accumulator, self._distance_spin)
         layout.addWidget(self._area)
 
         # Calculate button
