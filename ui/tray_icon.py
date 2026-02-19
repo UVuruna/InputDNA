@@ -6,9 +6,10 @@ InputDNA logos in the taskbar notification area, loaded from light/
 or dark/ subfolder based on the current Windows theme.
 
 Icon states:
+  {theme}/InputDNA.png        = default (app logo, before first recording)
   {theme}/InputDNA-start.png  = actively recording
   {theme}/InputDNA-pause.png  = recording but input idle
-  {theme}/InputDNA-stop.png   = not recording
+  {theme}/InputDNA-stop.png   = stopped recording
 
 Right-click menu: Stop Recording (during recording), Stats, Quit.
 
@@ -52,6 +53,7 @@ def _load_themed_icons() -> dict[str, Image.Image]:
     theme_dir = _UI_DIR / theme
     logger.info(f"Loading tray icons from ui/{theme}/")
     return {
+        "default": Image.open(theme_dir / "InputDNA.png"),
         "recording": Image.open(theme_dir / "InputDNA-start.png"),
         "idle": Image.open(theme_dir / "InputDNA-pause.png"),
         "stopped": Image.open(theme_dir / "InputDNA-stop.png"),
@@ -66,7 +68,7 @@ class TrayIcon:
     """
     System tray icon with status and controls.
 
-    Always visible after login. Starts in stopped (red) state.
+    Always visible after login. Starts with the default app logo.
 
     Usage:
         tray = TrayIcon(
@@ -88,7 +90,7 @@ class TrayIcon:
         self._icon: Optional[pystray.Icon] = None
 
     def run(self):
-        """Start the tray icon in stopped state. Blocks until quit."""
+        """Start the tray icon with default app logo. Blocks until quit."""
         menu = pystray.Menu(
             pystray.MenuItem(
                 text="Stop Recording",
@@ -108,8 +110,8 @@ class TrayIcon:
 
         self._icon = pystray.Icon(
             name="InputDNA",
-            icon=_icons["stopped"],
-            title="InputDNA — Not Recording",
+            icon=_icons["default"],
+            title="InputDNA",
             menu=menu,
         )
 

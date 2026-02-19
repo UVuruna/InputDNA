@@ -14,10 +14,12 @@ for the entire logged-in session (not just during recording).
   🐍 __init__.py
   🐍 tray_icon.py
   📁 light/                              Icons for light Windows theme
+    🖼️ InputDNA.png
     🖼️ InputDNA-start.png
     🖼️ InputDNA-pause.png
     🖼️ InputDNA-stop.png
   📁 dark/                               Icons for dark Windows theme
+    🖼️ InputDNA.png
     🖼️ InputDNA-start.png
     🖼️ InputDNA-pause.png
     🖼️ InputDNA-stop.png
@@ -41,14 +43,15 @@ Theme is detected once at startup.
 
 | State | File | Description |
 |-------|------|-------------|
+| Default | `{theme}/InputDNA.png` | App logo (initial state after login, before first recording) |
 | Recording | `{theme}/InputDNA-start.png` | Actively recording input |
 | Idle | `{theme}/InputDNA-pause.png` | Recording but no input for 60+ seconds (cosmetic) |
-| Stopped | `{theme}/InputDNA-stop.png` | Not recording (default after login) |
+| Stopped | `{theme}/InputDNA-stop.png` | Recording stopped |
 
 ### `light/` / `dark/` — Theme Icon Folders
 
 256x256 PNG icons exported from the SVG sources in `support/logo/`.
-Each folder contains the same three icons with colors optimized for
+Each folder contains four icons with colors optimized for
 the respective Windows taskbar background:
 
 - **light/** — dark outlines/shadows, visible on light taskbar
@@ -70,7 +73,7 @@ resizing to the appropriate system tray size (16-32px depending on DPI).
 ## Lifecycle
 
 ```
-Login  →  Tray appears (red/stopped)
+Login  →  Tray appears (app logo/default)
 Start  →  Green (recording) → Yellow after 60s idle → Green on input
 Stop   →  Red (stopped) — tray stays visible
 Logout →  Tray removed
@@ -86,6 +89,7 @@ It persists from login to logout/close, independent of recording state.
 
 | Question | Answer |
 |----------|--------|
+| Just logged in? | App logo (default) |
 | Is it recording? | Green mouse icon (start) |
 | Is the user idle? | Yellow mouse icon (pause) — cosmetic only |
 | Is it stopped? | Red mouse icon (stop) |
