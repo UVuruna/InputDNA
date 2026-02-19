@@ -8,10 +8,12 @@ No QWebEngine dependency — uses the system browser for full HTML5/CSS3
 and Mermaid diagram rendering.
 """
 
+import os
 import re
+import sys
+import shutil
 import logging
 import tempfile
-import webbrowser
 from pathlib import Path
 from string import Template
 
@@ -23,9 +25,14 @@ from ui.tray_icon import detect_windows_theme
 
 logger = logging.getLogger(__name__)
 
-# Temp directory for rendered HTML (persists for app lifetime)
-_docs_dir: Path | None = None
-_docs_theme: str | None = None
+# Stable temp directory (reused across app runs, overwritten on re-render)
+_DOCS_DIR = Path(tempfile.gettempdir()) / "InputDNA_docs"
+
+# Tracks which theme was last rendered (re-render on theme change)
+_rendered_theme: str | None = None
+
+# Project root used for resolving image paths
+_project_root: Path | None = None
 
 
 # ── HTML template ─────────────────────────────────────────────
@@ -181,28 +188,40 @@ li + li {
 <body>
 $content
 
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>
-mermaid.initialize({
-    startOnLoad: true,
-    theme: '$mermaid_theme',
-    themeVariables: {
-        primaryColor: '$primary',
-        primaryTextColor: '$text',
-        primaryBorderColor: '$border',
-        lineColor: '$text_dim',
-        secondaryColor: '$bg_alt',
-        tertiaryColor: '$bg_alt',
-        background: '$bg',
-        mainBkg: '$bg_alt',
-        nodeBorder: '$border',
-        clusterBkg: '$bg_alt',
-        clusterBorder: '$border',
-        titleColor: '$accent',
-        edgeLabelBackground: '$bg_alt',
-        fontSize: '14px'
-    }
-});
+// Mermaid: load from CDN, initialize only after script loads
+(function() {
+    var script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+    script.onload = function() {
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: '$mermaid_theme',
+            themeVariables: {
+                primaryColor: '$primary',
+                primaryTextColor: '$text',
+                primaryBorderColor: '$border',
+                lineColor: '$text_dim',
+                secondaryColor: '$bg_alt',
+                tertiaryColor: '$bg_alt',
+                background: '$bg',
+                mainBkg: '$bg_alt',
+                nodeBorder: '$border',
+                clusterBkg: '$bg_alt',
+                clusterBorder: '$border',
+                titleColor: '$accent',
+                edgeLabelBackground: '$bg_alt',
+                fontSize: '14px'
+            }
+        });
+        mermaid.run();
+    };
+    script.onerror = function() {
+        // CDN failed — show raw text as-is (no crash)
+        console.warn('Mermaid CDN unavailable, diagrams shown as text');
+    };
+    document.head.appendChild(script);
+})();
 </script>
 </body>
 </html>""")
@@ -214,35 +233,45 @@ mermaid.initialize({
 def open_docs(project_root: Path, file_name: str = "README.md"):
     """Render project docs to HTML and open in the default browser.
 
-    On first call, renders all .md files from project_root to a temp
-    directory. Subsequent calls reuse the cache unless the theme changed.
+    On first call, renders all .md files from project_root to the docs
+    temp directory. Subsequent calls reuse the cache unless the theme changed.
     """
-    global _docs_dir, _docs_theme
+    global _rendered_theme, _project_root
 
+    # Frozen exe: .md files are bundled inside _MEIPASS
+    if getattr(sys, "frozen", False):
+        project_root = Path(sys._MEIPASS)
+
+    _project_root = project_root.resolve()
     palette = _current_palette()
     current_theme = palette.get("color_scheme", "dark")
 
     # Re-render if first call or theme changed
-    if _docs_dir is None or _docs_theme != current_theme:
-        _docs_dir = Path(tempfile.mkdtemp(prefix="InputDNA_docs_"))
-        _docs_theme = current_theme
-        _render_all_docs(project_root, _docs_dir, palette)
+    if _rendered_theme != current_theme:
+        try:
+            _render_all_docs(_project_root, _DOCS_DIR, palette)
+            _rendered_theme = current_theme
+        except Exception as e:
+            logger.error(f"Failed to render docs: {e}")
+            return
 
     # Open the requested file
     html_name = Path(file_name).with_suffix(".html")
-    html_path = _docs_dir / html_name
+    html_path = _DOCS_DIR / html_name
+
+    if not html_path.exists():
+        # Fallback: try rendering just this file
+        md_path = _project_root / file_name
+        if md_path.exists():
+            try:
+                _render_single(md_path, _project_root, _DOCS_DIR, palette)
+            except Exception as e:
+                logger.error(f"Failed to render {file_name}: {e}")
+                return
 
     if html_path.exists():
-        webbrowser.open(html_path.as_uri())
+        os.startfile(str(html_path))
     else:
-        # Fallback: try rendering just this file
-        md_path = project_root / file_name
-        if md_path.exists():
-            _render_single(md_path, project_root, _docs_dir, palette)
-            html_path = _docs_dir / html_name
-            if html_path.exists():
-                webbrowser.open(html_path.as_uri())
-                return
         logger.warning(f"Documentation file not found: {file_name}")
 
 
@@ -251,6 +280,11 @@ def open_docs(project_root: Path, file_name: str = "README.md"):
 
 def _render_all_docs(project_root: Path, output_dir: Path, palette: dict):
     """Render all .md files from project root to HTML in output_dir."""
+    # Clean previous render
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True)
+
     md_files = list(project_root.glob("*.md")) + list(project_root.rglob("__*.md"))
 
     md_converter = markdown.Markdown(
@@ -261,8 +295,7 @@ def _render_all_docs(project_root: Path, output_dir: Path, palette: dict):
         _render_single(md_path, project_root, output_dir, palette, md_converter)
         md_converter.reset()
 
-    count = len(md_files)
-    logger.info(f"Rendered {count} docs to {output_dir}")
+    logger.info(f"Rendered {len(md_files)} docs to {output_dir}")
 
 
 def _render_single(
@@ -295,6 +328,9 @@ def _render_single(
     full_html = _HTML_TEMPLATE.substitute(**palette, content=html_body)
     html_path.write_text(full_html, encoding="utf-8")
 
+    # Copy referenced images to temp dir (preserves relative paths)
+    _copy_referenced_images(html_body, project_root, output_dir)
+
 
 # ── Helpers ───────────────────────────────────────────────────
 
@@ -315,15 +351,40 @@ def _preprocess_mermaid(content: str) -> str:
 def _rewrite_md_links(content: str) -> str:
     """Rewrite .md links to .html so browser navigation works.
 
-    Converts [text](path/to/file.md) → [text](path/to/file.html)
-    and [text](path/to/file.md#anchor) → [text](path/to/file.html#anchor)
+    Converts [text](path/to/file.md) -> [text](path/to/file.html)
+    and [text](path/to/file.md#anchor) -> [text](path/to/file.html#anchor)
     Leaves external URLs (http/https) untouched.
     """
+    def _replace(m):
+        link = m.group(2)
+        if link.startswith(("http://", "https://")):
+            return m.group(0)
+        return f'[{m.group(1)}]({link[:-3]}.html{m.group(3) or ""})'
+
     return re.sub(
         r'\[([^\]]*)\]\(([^)]*?\.md)(#[^)]*)?\)',
-        lambda m: f'[{m.group(1)}]({m.group(2)[:-3]}.html{m.group(3) or ""})',
+        _replace,
         content,
     )
+
+
+def _copy_referenced_images(html: str, project_root: Path, output_dir: Path):
+    """Copy images referenced in HTML from project root to the output dir.
+
+    Images in .md files use paths relative to the project root
+    (e.g. support/logo/dark/UV-InputDNA.svg). The rendered HTML
+    lives in a temp directory, so relative paths break.
+    Copying them preserves the relative structure.
+    """
+    for m in re.finditer(r'src="([^"]*)"', html):
+        src = m.group(1)
+        if src.startswith(("http://", "https://", "data:", "file://")):
+            continue
+        src_path = (project_root / src).resolve()
+        if src_path.exists():
+            dest_path = output_dir / src
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_path, dest_path)
 
 
 def _current_palette() -> dict:

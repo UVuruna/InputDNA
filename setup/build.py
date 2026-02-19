@@ -113,6 +113,22 @@ def build_pyinstaller():
         "--add-data", f"{PROJECT_DIR / 'support' / 'logo' / 'dark' / 'UV-InputDNA.svg'};logo/dark",
     ]
 
+    # Bundle documentation .md files (for Readme viewer in frozen exe)
+    for md_path in list(PROJECT_DIR.glob("*.md")) + list(PROJECT_DIR.rglob("__*.md")):
+        rel = md_path.relative_to(PROJECT_DIR)
+        dest = str(rel.parent) if str(rel.parent) != "." else "."
+        cmd.extend(["--add-data", f"{md_path};{dest}"])
+    # Also bundle docs/ folder (linked from README)
+    docs_dir = PROJECT_DIR / "docs"
+    if docs_dir.exists():
+        for md_path in docs_dir.glob("*.md"):
+            cmd.extend(["--add-data", f"{md_path};docs"])
+    # Bundle logo SVGs at original paths (for image rendering in docs)
+    for variant in ("dark", "light"):
+        svg = PROJECT_DIR / "support" / "logo" / variant / "UV-InputDNA.svg"
+        if svg.exists():
+            cmd.extend(["--add-data", f"{svg};support/logo/{variant}"])
+
     # Add hidden imports
     for mod in hidden_imports:
         cmd.extend(["--hidden-import", mod])
