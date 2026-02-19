@@ -401,7 +401,7 @@ def _copy_referenced_images(html: str, project_root: Path, output_dir: Path):
     is served via local HTTP, so relative paths resolve correctly
     as long as the files exist in the serving directory.
     """
-    for m in re.finditer(r'src="([^"]*)"', html):
+    for m in re.finditer(r'(?:src|srcset)="([^"]*)"', html):
         src = m.group(1)
         if src.startswith(("http://", "https://", "data:", "file://")):
             continue
