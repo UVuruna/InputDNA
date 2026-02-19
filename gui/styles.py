@@ -621,14 +621,6 @@ QWidget#readme-nav {
     border-bottom: 1px solid $border;
 }
 
-QWidget#readme-nav QLabel {
-    background-color: transparent;
-}
-
-QWebEngineView {
-    border: none;
-}
-
 /* ── Scroll area ──────────────────────────────────────────── */
 QScrollArea {
     background-color: $bg;

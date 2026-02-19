@@ -50,7 +50,7 @@ from gui.login_screen import LoginScreen
 from gui.main_dashboard import MainDashboard
 from gui.settings_screen import SettingsScreen
 from gui.validation_screen import ValidationScreen
-from gui.readme_viewer import ReadmeViewer
+from gui.readme_viewer import open_docs
 from gui.calibration_dialog import ClickCalibrationDialog
 from gui.dpi_dialog import DpiMeasurementDialog
 from gui.styles import get_stylesheet
@@ -200,10 +200,9 @@ class MainWindow(QMainWindow):
 
     # Screen indices in the stacked widget
     _LOGIN = 0
-    _README = 1
-    _DASHBOARD = 2
-    _SETTINGS = 3
-    _VALIDATION = 4
+    _DASHBOARD = 1
+    _SETTINGS = 2
+    _VALIDATION = 3
 
     def __init__(self):
         super().__init__()
@@ -235,12 +234,7 @@ class MainWindow(QMainWindow):
         self._login_screen.readme_signal.connect(self._show_readme)
         self._stack.addWidget(self._login_screen)
 
-        # Screen 1: Readme viewer (permanent, no user context needed)
-        self._readme_viewer = ReadmeViewer(Path(__file__).parent)
-        self._readme_viewer.back_signal.connect(self._show_login)
-        self._stack.addWidget(self._readme_viewer)
-
-        # Screens 2-4 are created after login (need user_id)
+        # Screens 1-3 are created after login (need user_id)
         self._dashboard: MainDashboard | None = None
         self._settings: SettingsScreen | None = None
         self._validation: ValidationScreen | None = None
@@ -294,13 +288,13 @@ class MainWindow(QMainWindow):
     def _create_user_screens(self, profile: UserProfile):
         """Create/replace dashboard, settings, validation screens."""
         # Remove old screens if they exist (re-login after logout)
-        # Keep login (0) and readme (1) — they're permanent
-        while self._stack.count() > 2:
-            w = self._stack.widget(2)
+        # Keep login (0) — it's permanent
+        while self._stack.count() > 1:
+            w = self._stack.widget(1)
             self._stack.removeWidget(w)
             w.deleteLater()
 
-        # Screen 2: Dashboard
+        # Screen 1: Dashboard
         self._dashboard = MainDashboard(profile)
         self._dashboard.start_recording_signal.connect(self._start_recording)
         self._dashboard.stop_recording_signal.connect(self._stop_recording)
@@ -310,14 +304,14 @@ class MainWindow(QMainWindow):
         self._dashboard.home_signal.connect(self._show_login)
         self._stack.addWidget(self._dashboard)
 
-        # Screen 3: Settings
+        # Screen 2: Settings
         self._settings = SettingsScreen(profile.id)
         self._settings.back_signal.connect(self._show_dashboard)
         self._settings.calibrate_click_signal.connect(self._open_click_calibration)
         self._settings.calibrate_dpi_signal.connect(self._open_dpi_calibration)
         self._stack.addWidget(self._settings)
 
-        # Screen 4: Validation
+        # Screen 3: Validation
         self._validation = ValidationScreen()
         self._validation.back_signal.connect(self._show_dashboard)
         self._stack.addWidget(self._validation)
@@ -371,8 +365,8 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(self._LOGIN)
 
     def _show_readme(self):
-        """Navigate to readme documentation viewer."""
-        self._stack.setCurrentIndex(self._README)
+        """Open project documentation in the default browser."""
+        open_docs(Path(__file__).parent)
 
     def _show_dashboard(self):
         self._stack.setCurrentIndex(self._DASHBOARD)
@@ -613,10 +607,6 @@ class MainWindow(QMainWindow):
 
         # Default: navigate back from sub-screens, exit from login/dashboard
         current = self._stack.currentIndex()
-        if current == self._README:
-            self._show_login()
-            event.ignore()
-            return
         if current in (self._SETTINGS, self._VALIDATION):
             self._show_dashboard()
             event.ignore()

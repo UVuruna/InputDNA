@@ -81,6 +81,11 @@ def build_pyinstaller():
         "xmlrpc",
         "pydoc",
         "tkinter",
+        # QWebEngine = Chromium (~500 MB). Docs viewer uses system browser instead.
+        "PySide6.QtWebEngineWidgets",
+        "PySide6.QtWebEngineCore",
+        "PySide6.QtWebChannel",
+        "PySide6.QtWebEngineQuick",
     ]
 
     # Modules PyInstaller fails to detect automatically

@@ -228,24 +228,22 @@ All data comes from RAM — no database reads.
 
 Updated via `update_system_info()` method called from the application layer.
 
-### `readme_viewer.py` — Documentation Viewer
+### `readme_viewer.py` — Documentation Viewer (Browser-Based)
 
-Full-screen widget for browsing project `.md` files. Accessible from
-the login screen via the Readme button (top-right). Uses QWebEngineView
-(Chromium) with Python's `markdown` library (tables, fenced_code, toc
-extensions) for rendering. Mermaid diagrams rendered via CDN.
+Renders project `.md` files to themed HTML and opens them in the default
+browser. Accessible from the login screen via the Readme button.
 
-**Navigation bar:** ← Back (return to login), ◀/▶ (file history
-back/forward), file path label, Home (reset to README.md).
+Uses Python's `markdown` library (tables, fenced_code, toc extensions)
+for conversion. Mermaid diagrams rendered via CDN in the browser.
+No QWebEngine dependency — saves ~500 MB from the installer.
 
-**Link handling:** Internal `.md` links load in the viewer. External
-URLs open in the system browser. Fragment links (`#section`) scroll
-within the document.
+**How it works:** On first call, renders all `.md` files from the project
+root to a temp directory (`%TEMP%/InputDNA_docs_*/`). Internal `.md` links
+are rewritten to `.html` so browser navigation works between documents.
+Re-renders when the theme changes.
 
-**Theme:** HTML/CSS generated at render time from the active palette
-(`DARK_PALETTE` / `LIGHT_PALETTE`), matching the application theme.
-
-Signal: `back_signal` (return to login screen).
+**Public API:** `open_docs(project_root, file_name="README.md")` — call
+from any screen to open documentation in the browser.
 
 ### `settings_screen.py` — Per-User Settings Page
 
