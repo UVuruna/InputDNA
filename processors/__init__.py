@@ -24,7 +24,6 @@ from processors.drag_detector import DragDetector
 from processors.keyboard_processor import KeyboardProcessor
 from database.writer import DatabaseWriter
 from utils.timing import now_ns, wall_clock_iso
-from utils.system_monitor import PollingRateEstimator
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +40,11 @@ class EventProcessor:
     """
 
     def __init__(self, event_queue: queue.Queue, db_writer: DatabaseWriter,
-                 recording_session_id: int = 0,
-                 polling_estimator: PollingRateEstimator | None = None):
+                 recording_session_id: int = 0):
         self._event_queue = event_queue
         self._db = db_writer
         self._running = False
         self._thread: threading.Thread | None = None
-        self._polling_estimator = polling_estimator
 
         # Sub-processors
         self._mouse_session = MouseSessionDetector(
@@ -120,10 +117,6 @@ class EventProcessor:
         self._last_event_ns = event.t_ns
 
         if isinstance(event, RawMouseMove):
-            # Feed polling rate estimator
-            if self._polling_estimator is not None:
-                self._polling_estimator.add_move_timestamp(event.t_ns)
-
             # Check drag first — if dragging, don't feed to session detector
             was_dragging = self._drag_det.is_dragging
             if self._drag_det.process_move(event):

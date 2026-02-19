@@ -37,6 +37,15 @@ class SettingsScreen(QWidget):
         self._build_ui()
         self._load_current_values()
 
+    def showEvent(self, event):
+        """Refresh downsample options each time settings screen is shown."""
+        super().showEvent(event)
+        current = self._downsample_combo.currentData()
+        self._populate_downsample_combo()
+        idx = self._downsample_combo.findData(current)
+        if idx >= 0:
+            self._downsample_combo.setCurrentIndex(idx)
+
     def _build_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(30, 20, 30, 20)
@@ -74,9 +83,7 @@ class SettingsScreen(QWidget):
         # Downsampling Hz
         rec_layout.addWidget(QLabel("Downsampling:"), row, 0)
         self._downsample_combo = QComboBox()
-        self._downsample_combo.addItem("Off (store all)", 0)
-        for hz in [125, 250, 500, 1000, 2000, 4000, 8000]:
-            self._downsample_combo.addItem(f"{hz} Hz", hz)
+        self._populate_downsample_combo()
         rec_layout.addWidget(self._downsample_combo, row, 1)
         row += 1
 
@@ -177,8 +184,28 @@ class SettingsScreen(QWidget):
         scroll.setWidget(content)
         outer.addWidget(scroll)
 
+    def _populate_downsample_combo(self):
+        """Populate downsample combo with rates below the detected polling rate."""
+        self._downsample_combo.clear()
+        self._downsample_combo.addItem("Off (store all)", 0)
+
+        polling = config.ESTIMATED_POLLING_HZ
+        all_rates = [125, 250, 500, 1000, 2000, 4000, 8000]
+
+        if polling is not None:
+            rates = [hz for hz in all_rates if hz < polling]
+        else:
+            # Polling rate not yet estimated — show all options
+            rates = all_rates
+
+        for hz in rates:
+            self._downsample_combo.addItem(f"{hz} Hz", hz)
+
     def _load_current_values(self):
         """Load current values from config (which may already have user overrides)."""
+        # Refresh downsample options (polling rate may have been estimated since build)
+        self._populate_downsample_combo()
+
         # Downsampling
         idx = self._downsample_combo.findData(config.DOWNSAMPLE_HZ)
         if idx >= 0:

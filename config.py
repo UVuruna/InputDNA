@@ -160,6 +160,19 @@ SYSTEM_MONITOR_INTERVAL_S = 10.0
 # Number of mouse move events to sample for polling rate estimation.
 POLLING_RATE_SAMPLE_COUNT = 500
 
+# Estimated mouse polling rate (Hz). Set at runtime by the polling rate
+# estimator after login. None means not yet measured.
+# Used by settings screen to filter downsample options.
+ESTIMATED_POLLING_HZ: int | None = None
+
+# Standard polling rates (hardware). Used to snap estimated Hz to nearest.
+_STANDARD_POLLING_RATES = [125, 250, 500, 1000, 2000, 4000, 8000]
+
+
+def snap_polling_rate(raw_hz: int) -> int:
+    """Snap a raw estimated Hz to the nearest standard polling rate."""
+    return min(_STANDARD_POLLING_RATES, key=lambda r: abs(r - raw_hz))
+
 # Seconds of no mouse/keyboard input before tray icon shows idle state.
 # Purely cosmetic — recorder still runs, just visual feedback.
 IDLE_ICON_TIMEOUT_S = 60

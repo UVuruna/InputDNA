@@ -35,8 +35,10 @@ from listeners.keyboard_listener import KeyboardListener
 from processors import EventProcessor
 from models.sessions import RecordingSessionRecord
 from utils.timing import now_ns, wall_clock_iso
-from utils.system_monitor import SystemMonitor, PollingRateEstimator, get_all_state
-from ui.tray_icon import TrayIcon
+from utils.system_monitor import (
+    SystemMonitor, get_all_state, start_polling_estimation,
+)
+from ui.tray_icon import TrayIcon, detect_windows_theme
 from gui.login_screen import LoginScreen
 from gui.main_dashboard import MainDashboard
 from gui.settings_screen import SettingsScreen
@@ -75,7 +77,6 @@ class Recorder:
         self._processor: EventProcessor | None = None
         self._recording_session: RecordingSessionRecord | None = None
         self._session_id: int = 0
-        self._polling_estimator = PollingRateEstimator()
 
     def start(self):
         """Start all recording threads. Returns immediately."""
@@ -124,7 +125,6 @@ class Recorder:
         self._processor = EventProcessor(
             self._event_queue, self._db_writer,
             recording_session_id=self._session_id,
-            polling_estimator=self._polling_estimator,
         )
         self._processor.start()
 
@@ -185,10 +185,6 @@ class Recorder:
     def last_event_ns(self) -> int:
         return self._processor.last_event_ns if self._processor else 0
 
-    @property
-    def estimated_polling_hz(self) -> int | None:
-        return self._polling_estimator.estimated_hz
-
 
 class MainWindow(QMainWindow):
     """Main application window — manages screen transitions and recorder."""
@@ -246,6 +242,11 @@ class MainWindow(QMainWindow):
         # Set active user folder in config (uses CUSTOM_USER_DATA_DIR if set)
         config.set_active_user(profile.username, profile.surname, profile.date_of_birth)
 
+        # Start polling rate estimation immediately (temporary mouse listener)
+        self._polling_estimator = start_polling_estimation(
+            on_done=self._on_polling_rate_estimated,
+        )
+
         # Create screens that need user context
         self._create_user_screens(profile)
 
@@ -286,6 +287,13 @@ class MainWindow(QMainWindow):
         self._validation.back_signal.connect(self._show_dashboard)
         self._stack.addWidget(self._validation)
 
+    def _on_polling_rate_estimated(self, hz: int):
+        """Called from estimator thread when polling rate is determined."""
+        # Update dashboard from Qt thread
+        QTimer.singleShot(0, lambda: self._dashboard.update_system_info(
+            get_all_state(), hz,
+        ) if self._dashboard else None)
+
     def _on_logout(self):
         """Stop recording if active, remove tray, reset config, go back to login."""
         if self._recorder:
@@ -294,6 +302,7 @@ class MainWindow(QMainWindow):
         self._stop_tray()
 
         config.reset_to_defaults()
+        config.ESTIMATED_POLLING_HZ = None
         config.clear_active_user()
         self._user = None
         logger.info("User logged out")
@@ -362,7 +371,7 @@ class MainWindow(QMainWindow):
             if self._system_monitor:
                 self._dashboard.update_system_info(
                     self._system_monitor.current_state,
-                    self._recorder.estimated_polling_hz,
+                    config.ESTIMATED_POLLING_HZ,
                 )
 
             # Idle detection — cosmetic tray icon update
@@ -495,12 +504,21 @@ def main():
     # Load global settings (data location, autostart) before anything else
     _apply_global_settings()
 
-    # Set application icon (title bar + taskbar)
-    icon_path = Path(__file__).parent / "setup" / "InputDNA.ico"
+    # Set application icon (title bar + taskbar) — theme-aware SVG
+    theme = detect_windows_theme()
     if getattr(sys, 'frozen', False):
-        icon_path = Path(sys._MEIPASS) / "InputDNA.ico"
-    if icon_path.exists():
-        app.setWindowIcon(QIcon(str(icon_path)))
+        svg_path = Path(sys._MEIPASS) / "logo" / theme / "UV-InputDNA.svg"
+    else:
+        svg_path = Path(__file__).parent / "support" / "logo" / theme / "UV-InputDNA.svg"
+    if svg_path.exists():
+        app.setWindowIcon(QIcon(str(svg_path)))
+    else:
+        # Fallback to ICO (e.g. SVG not bundled)
+        ico_path = Path(__file__).parent / "setup" / "InputDNA.ico"
+        if getattr(sys, 'frozen', False):
+            ico_path = Path(sys._MEIPASS) / "InputDNA.ico"
+        if ico_path.exists():
+            app.setWindowIcon(QIcon(str(ico_path)))
 
     window = MainWindow()
     window.show()

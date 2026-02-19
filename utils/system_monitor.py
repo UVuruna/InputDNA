@@ -174,6 +174,44 @@ class PollingRateEstimator:
         return self._estimated_hz
 
 
+def start_polling_estimation(on_done: Optional[Callable[[int], None]] = None) -> PollingRateEstimator:
+    """
+    Start a temporary mouse listener to estimate polling rate.
+
+    Runs in the background. Once enough samples are collected, the
+    listener stops itself and calls on_done(hz) on the listener thread.
+    Also sets config.ESTIMATED_POLLING_HZ.
+
+    Returns the estimator so callers can check .estimated_hz later.
+    """
+    from pynput import mouse as _mouse
+    from utils.timing import now_ns as _now_ns
+
+    estimator = PollingRateEstimator()
+    holder: dict = {"listener": None}
+
+    def _on_move(x, y):
+        t = _now_ns()
+        estimator.add_move_timestamp(t)
+        if estimator.estimated_hz is not None:
+            raw_hz = estimator.estimated_hz
+            snapped = config.snap_polling_rate(raw_hz)
+            config.ESTIMATED_POLLING_HZ = snapped
+            logger.info(f"Polling rate set: raw ~{raw_hz} Hz → snapped {snapped} Hz")
+            if on_done is not None:
+                on_done(snapped)
+            listener = holder.get("listener")
+            if listener is not None:
+                listener.stop()
+
+    listener = _mouse.Listener(on_move=_on_move)
+    listener.daemon = True
+    holder["listener"] = listener
+    listener.start()
+    logger.info("Polling rate estimation started (temporary mouse listener)")
+    return estimator
+
+
 # ─────────────────────────────────────────────────────────────
 # SYSTEM MONITOR (change detection thread)
 # ─────────────────────────────────────────────────────────────
