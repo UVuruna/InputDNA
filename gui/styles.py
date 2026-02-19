@@ -153,6 +153,38 @@ QLabel#stat-value {
     color: $accent;
 }
 
+QLabel#stat-sub-label {
+    font-size: 12px;
+    color: $text_dim;
+}
+
+QLabel#stat-sub-value {
+    font-size: 13px;
+    font-weight: bold;
+    color: $accent;
+}
+
+QLabel#stat-nav {
+    font-size: 13px;
+    font-weight: bold;
+    color: $highlight;
+}
+
+QPushButton#stat-arrow {
+    background-color: transparent;
+    color: $highlight;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 2px 8px;
+    min-height: 16px;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#stat-arrow:hover {
+    background-color: $bg_button;
+}
+
 QLabel#info-value {
     font-size: 13px;
     font-weight: bold;

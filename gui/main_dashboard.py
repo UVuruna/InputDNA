@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt, QTimer
 
+import config
 from gui.user_db import UserProfile
 from gui.export_utils import export_all_user_data, get_user_db_files
 
@@ -42,10 +43,12 @@ class MainDashboard(QWidget):
         self._stats_timer.timeout.connect(self._update_stats_display)
         self._stats_timer.start(1000)  # Update every second
 
-        # Counters (updated externally)
-        self.movement_count = 0
-        self.click_count = 0
-        self.keystroke_count = 0
+        # Stats data (updated externally via update_stats)
+        self._totals: dict[str, int] = {}
+        self._windowed: dict[str, int] = {}
+
+        # Stats view mode: "total" or "windowed"
+        self._stats_mode: str = "total"
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -118,27 +121,201 @@ class MainDashboard(QWidget):
 
         layout.addWidget(actions_group)
 
-        # ── Recording Stats ────────────────────────────────
-        stats_group = QGroupBox("Recording Statistics")
-        stats_layout = QGridLayout(stats_group)
-        stats_layout.setSpacing(10)
+        # ── Stats Navigation (shared toggle) ──────────────
+        nav_layout = QHBoxLayout()
+        nav_layout.setContentsMargins(0, 0, 0, 0)
 
-        stats_layout.addWidget(QLabel("Movements:"), 0, 0)
-        self._movements_label = QLabel("0")
-        self._movements_label.setObjectName("stat-value")
-        stats_layout.addWidget(self._movements_label, 0, 1)
+        nav_layout.addStretch()
 
-        stats_layout.addWidget(QLabel("Clicks:"), 0, 2)
-        self._clicks_label = QLabel("0")
-        self._clicks_label.setObjectName("stat-value")
-        stats_layout.addWidget(self._clicks_label, 0, 3)
+        self._nav_left_btn = QPushButton("\u25C0")
+        self._nav_left_btn.setObjectName("stat-arrow")
+        self._nav_left_btn.clicked.connect(self._toggle_stats_mode)
+        nav_layout.addWidget(self._nav_left_btn)
 
-        stats_layout.addWidget(QLabel("Keystrokes:"), 0, 4)
-        self._keystrokes_label = QLabel("0")
-        self._keystrokes_label.setObjectName("stat-value")
-        stats_layout.addWidget(self._keystrokes_label, 0, 5)
+        self._nav_label = QLabel("Total")
+        self._nav_label.setObjectName("stat-nav")
+        self._nav_label.setAlignment(Qt.AlignCenter)
+        self._nav_label.setMinimumWidth(120)
+        nav_layout.addWidget(self._nav_label)
 
-        layout.addWidget(stats_group)
+        self._nav_right_btn = QPushButton("\u25B6")
+        self._nav_right_btn.setObjectName("stat-arrow")
+        self._nav_right_btn.clicked.connect(self._toggle_stats_mode)
+        nav_layout.addWidget(self._nav_right_btn)
+
+        nav_layout.addStretch()
+
+        layout.addLayout(nav_layout)
+
+        # ── Recording Stats (Mouse + Keyboard side by side) ──
+        stats_row = QHBoxLayout()
+        stats_row.setSpacing(15)
+
+        # ── Mouse group ───────────────────────────────────
+        mouse_group = QGroupBox("Mouse")
+        mouse_layout = QGridLayout(mouse_group)
+        mouse_layout.setSpacing(6)
+        mouse_layout.setContentsMargins(12, 20, 12, 12)
+
+        row = 0
+        # Movements
+        mouse_layout.addWidget(QLabel("Movements"), row, 0)
+        self._movements_val = QLabel("0")
+        self._movements_val.setObjectName("stat-value")
+        self._movements_val.setAlignment(Qt.AlignRight)
+        mouse_layout.addWidget(self._movements_val, row, 1, 1, 3)
+
+        # Clicks
+        row += 1
+        mouse_layout.addWidget(QLabel("Clicks"), row, 0)
+        self._clicks_val = QLabel("0")
+        self._clicks_val.setObjectName("stat-value")
+        self._clicks_val.setAlignment(Qt.AlignRight)
+        mouse_layout.addWidget(self._clicks_val, row, 1, 1, 3)
+
+        # Click breakdown: Left / Right / Middle
+        row += 1
+        for col, (label, attr) in enumerate([
+            ("Left", "_left_clicks_val"),
+            ("Right", "_right_clicks_val"),
+            ("Middle", "_middle_clicks_val"),
+        ]):
+            sub = QVBoxLayout()
+            sub.setSpacing(1)
+            lbl = QLabel(label)
+            lbl.setObjectName("stat-sub-label")
+            lbl.setAlignment(Qt.AlignCenter)
+            sub.addWidget(lbl)
+            val = QLabel("0")
+            val.setObjectName("stat-sub-value")
+            val.setAlignment(Qt.AlignCenter)
+            setattr(self, attr, val)
+            sub.addWidget(val)
+            mouse_layout.addLayout(sub, row, col + 1)
+
+        # Click sequences: Double / Triple / Spam
+        row += 1
+        for col, (label, attr) in enumerate([
+            ("Double", "_double_clicks_val"),
+            ("Triple", "_triple_clicks_val"),
+            ("Spam", "_spam_clicks_val"),
+        ]):
+            sub = QVBoxLayout()
+            sub.setSpacing(1)
+            lbl = QLabel(label)
+            lbl.setObjectName("stat-sub-label")
+            lbl.setAlignment(Qt.AlignCenter)
+            sub.addWidget(lbl)
+            val = QLabel("0")
+            val.setObjectName("stat-sub-value")
+            val.setAlignment(Qt.AlignCenter)
+            setattr(self, attr, val)
+            sub.addWidget(val)
+            mouse_layout.addLayout(sub, row, col + 1)
+
+        # Drags
+        row += 1
+        mouse_layout.addWidget(QLabel("Drags"), row, 0)
+        self._drags_val = QLabel("0")
+        self._drags_val.setObjectName("stat-value")
+        self._drags_val.setAlignment(Qt.AlignRight)
+        mouse_layout.addWidget(self._drags_val, row, 1, 1, 3)
+
+        # Scrolls
+        row += 1
+        mouse_layout.addWidget(QLabel("Scrolls"), row, 0)
+        self._scrolls_val = QLabel("0")
+        self._scrolls_val.setObjectName("stat-value")
+        self._scrolls_val.setAlignment(Qt.AlignRight)
+        mouse_layout.addWidget(self._scrolls_val, row, 1, 1, 3)
+
+        # Stretch first column, let sub-stat columns share remaining space
+        mouse_layout.setColumnStretch(0, 2)
+        mouse_layout.setColumnStretch(1, 1)
+        mouse_layout.setColumnStretch(2, 1)
+        mouse_layout.setColumnStretch(3, 1)
+
+        stats_row.addWidget(mouse_group)
+
+        # ── Keyboard group ────────────────────────────────
+        kb_group = QGroupBox("Keyboard")
+        kb_layout = QGridLayout(kb_group)
+        kb_layout.setSpacing(6)
+        kb_layout.setContentsMargins(12, 20, 12, 12)
+
+        row = 0
+        # Keystrokes
+        kb_layout.addWidget(QLabel("Keystrokes"), row, 0)
+        self._keystrokes_val = QLabel("0")
+        self._keystrokes_val.setObjectName("stat-value")
+        self._keystrokes_val.setAlignment(Qt.AlignRight)
+        kb_layout.addWidget(self._keystrokes_val, row, 1, 1, 3)
+
+        # Keystroke breakdown row 1: Upper / Lower / Code
+        row += 1
+        for col, (label, attr) in enumerate([
+            ("Upper", "_upper_keys_val"),
+            ("Lower", "_lower_keys_val"),
+            ("Code", "_code_keys_val"),
+        ]):
+            sub = QVBoxLayout()
+            sub.setSpacing(1)
+            lbl = QLabel(label)
+            lbl.setObjectName("stat-sub-label")
+            lbl.setAlignment(Qt.AlignCenter)
+            sub.addWidget(lbl)
+            val = QLabel("0")
+            val.setObjectName("stat-sub-value")
+            val.setAlignment(Qt.AlignCenter)
+            setattr(self, attr, val)
+            sub.addWidget(val)
+            kb_layout.addLayout(sub, row, col + 1)
+
+        # Keystroke breakdown row 2: Number / Numpad / Other
+        row += 1
+        for col, (label, attr) in enumerate([
+            ("Number", "_number_keys_val"),
+            ("Numpad", "_numpad_keys_val"),
+            ("Other", "_other_keys_val"),
+        ]):
+            sub = QVBoxLayout()
+            sub.setSpacing(1)
+            lbl = QLabel(label)
+            lbl.setObjectName("stat-sub-label")
+            lbl.setAlignment(Qt.AlignCenter)
+            sub.addWidget(lbl)
+            val = QLabel("0")
+            val.setObjectName("stat-sub-value")
+            val.setAlignment(Qt.AlignCenter)
+            setattr(self, attr, val)
+            sub.addWidget(val)
+            kb_layout.addLayout(sub, row, col + 1)
+
+        # Shortcuts
+        row += 1
+        kb_layout.addWidget(QLabel("Shortcuts"), row, 0)
+        self._shortcuts_val = QLabel("0")
+        self._shortcuts_val.setObjectName("stat-value")
+        self._shortcuts_val.setAlignment(Qt.AlignRight)
+        kb_layout.addWidget(self._shortcuts_val, row, 1, 1, 3)
+
+        # Words
+        row += 1
+        kb_layout.addWidget(QLabel("Words"), row, 0)
+        self._words_val = QLabel("0")
+        self._words_val.setObjectName("stat-value")
+        self._words_val.setAlignment(Qt.AlignRight)
+        kb_layout.addWidget(self._words_val, row, 1, 1, 3)
+
+        # Stretch first column
+        kb_layout.setColumnStretch(0, 2)
+        kb_layout.setColumnStretch(1, 1)
+        kb_layout.setColumnStretch(2, 1)
+        kb_layout.setColumnStretch(3, 1)
+
+        stats_row.addWidget(kb_group)
+
+        layout.addLayout(stats_row)
 
         # ── System Info ──────────────────────────────────────
         sys_group = QGroupBox("System Info")
@@ -146,27 +323,27 @@ class MainDashboard(QWidget):
         sys_layout.setSpacing(10)
 
         sys_layout.addWidget(QLabel("Keyboard Layout:"), 0, 0)
-        self._layout_label = QLabel("—")
+        self._layout_label = QLabel("\u2014")
         self._layout_label.setObjectName("info-value")
         sys_layout.addWidget(self._layout_label, 0, 1)
 
         sys_layout.addWidget(QLabel("Polling Rate:"), 0, 2)
-        self._polling_label = QLabel("—")
+        self._polling_label = QLabel("\u2014")
         self._polling_label.setObjectName("info-value")
         sys_layout.addWidget(self._polling_label, 0, 3)
 
         sys_layout.addWidget(QLabel("Mouse Speed:"), 1, 0)
-        self._mouse_speed_label = QLabel("—")
+        self._mouse_speed_label = QLabel("\u2014")
         self._mouse_speed_label.setObjectName("info-value")
         sys_layout.addWidget(self._mouse_speed_label, 1, 1)
 
         sys_layout.addWidget(QLabel("Acceleration:"), 1, 2)
-        self._accel_label = QLabel("—")
+        self._accel_label = QLabel("\u2014")
         self._accel_label.setObjectName("info-value")
         sys_layout.addWidget(self._accel_label, 1, 3)
 
         sys_layout.addWidget(QLabel("Resolution:"), 2, 0)
-        self._resolution_label = QLabel("—")
+        self._resolution_label = QLabel("\u2014")
         self._resolution_label.setObjectName("info-value")
         sys_layout.addWidget(self._resolution_label, 2, 1)
 
@@ -187,6 +364,20 @@ class MainDashboard(QWidget):
         layout.addWidget(model_group)
 
         layout.addStretch()
+
+    # ── Stats navigation ──────────────────────────────────
+
+    def _toggle_stats_mode(self):
+        """Toggle between total and windowed stats display."""
+        if self._stats_mode == "total":
+            self._stats_mode = "windowed"
+            self._nav_label.setText(f"Last {config.STATS_WINDOW_MINUTES} min")
+        else:
+            self._stats_mode = "total"
+            self._nav_label.setText("Total")
+        self._update_stats_display()
+
+    # ── Recording toggle ──────────────────────────────────
 
     def _toggle_recording(self):
         if self._recording:
@@ -251,11 +442,38 @@ class MainDashboard(QWidget):
         self.validate_model_signal.emit()
 
     def _update_stats_display(self):
-        self._movements_label.setText(str(self.movement_count))
-        self._clicks_label.setText(str(self.click_count))
-        self._keystrokes_label.setText(str(self.keystroke_count))
+        """Refresh all stat labels from cached totals/windowed data."""
+        data = self._totals if self._stats_mode == "total" else self._windowed
 
-    # ── Public methods called from app.py ──────────────────
+        # Mouse stats
+        self._movements_val.setText(self._fmt(data.get("movements", 0)))
+        self._clicks_val.setText(self._fmt(data.get("clicks", 0)))
+        self._left_clicks_val.setText(self._fmt(data.get("left_clicks", 0)))
+        self._right_clicks_val.setText(self._fmt(data.get("right_clicks", 0)))
+        self._middle_clicks_val.setText(self._fmt(data.get("middle_clicks", 0)))
+        self._double_clicks_val.setText(self._fmt(data.get("double_clicks", 0)))
+        self._triple_clicks_val.setText(self._fmt(data.get("triple_clicks", 0)))
+        self._spam_clicks_val.setText(self._fmt(data.get("spam_clicks", 0)))
+        self._drags_val.setText(self._fmt(data.get("drags", 0)))
+        self._scrolls_val.setText(self._fmt(data.get("scrolls", 0)))
+
+        # Keyboard stats
+        self._keystrokes_val.setText(self._fmt(data.get("keystrokes", 0)))
+        self._upper_keys_val.setText(self._fmt(data.get("upper_keys", 0)))
+        self._lower_keys_val.setText(self._fmt(data.get("lower_keys", 0)))
+        self._code_keys_val.setText(self._fmt(data.get("code_keys", 0)))
+        self._number_keys_val.setText(self._fmt(data.get("number_keys", 0)))
+        self._numpad_keys_val.setText(self._fmt(data.get("numpad_keys", 0)))
+        self._other_keys_val.setText(self._fmt(data.get("other_keys", 0)))
+        self._shortcuts_val.setText(self._fmt(data.get("shortcuts", 0)))
+        self._words_val.setText(self._fmt(data.get("words", 0)))
+
+    @staticmethod
+    def _fmt(n: int) -> str:
+        """Format number with thousand separators."""
+        return f"{n:,}"
+
+    # ── Public methods called from main.py ──────────────────
 
     def on_training_complete(self, success: bool, message: str):
         """Called when training finishes."""
@@ -268,11 +486,10 @@ class MainDashboard(QWidget):
             self._model_status_label.setText(f"Training failed: {message}")
             QMessageBox.warning(self, "Training Failed", message)
 
-    def update_stats(self, movements: int, clicks: int, keystrokes: int):
-        """Update stat counters (called from recorder thread)."""
-        self.movement_count = movements
-        self.click_count = clicks
-        self.keystroke_count = keystrokes
+    def update_stats(self, totals: dict[str, int], windowed: dict[str, int]):
+        """Update stat data (called from main thread timer)."""
+        self._totals = totals
+        self._windowed = windowed
 
     def _on_export(self):
         """Export user's recording database files."""
@@ -314,10 +531,10 @@ class MainDashboard(QWidget):
         state: dict from SystemMonitor.current_state
         polling_hz: estimated mouse polling rate (None if not yet estimated)
         """
-        self._layout_label.setText(state.get("keyboard_layout", "—"))
-        speed = state.get("mouse_speed", "—")
-        self._mouse_speed_label.setText(f"{speed} / 20" if speed != "—" else "—")
-        accel = state.get("mouse_acceleration", "—")
+        self._layout_label.setText(state.get("keyboard_layout", "\u2014"))
+        speed = state.get("mouse_speed", "\u2014")
+        self._mouse_speed_label.setText(f"{speed} / 20" if speed != "\u2014" else "\u2014")
+        accel = state.get("mouse_acceleration", "\u2014")
         self._accel_label.setText("On" if accel == "True" else "Off" if accel == "False" else accel)
-        self._resolution_label.setText(state.get("screen_resolution", "—"))
+        self._resolution_label.setText(state.get("screen_resolution", "\u2014"))
         self._polling_label.setText(f"~{polling_hz} Hz" if polling_hz else "Estimating...")

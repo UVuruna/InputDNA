@@ -126,6 +126,14 @@ class SettingsScreen(QWidget):
         rec_layout.addWidget(self._db_size_combo, row, 1)
         row += 1
 
+        # Stats window (Last N minutes)
+        rec_layout.addWidget(QLabel("Stats window:"), row, 0)
+        self._stats_window_combo = QComboBox()
+        for minutes in (10, 20, 30, 40, 50, 60):
+            self._stats_window_combo.addItem(f"{minutes} min", minutes)
+        rec_layout.addWidget(self._stats_window_combo, row, 1)
+        row += 1
+
         layout.addWidget(rec_group)
 
         # ── System Settings ───────────────────────────────────
@@ -231,6 +239,11 @@ class SettingsScreen(QWidget):
         # DPI
         self._dpi_spin.setValue(config.USER_DPI)
 
+        # Stats window
+        idx = self._stats_window_combo.findData(config.STATS_WINDOW_MINUTES)
+        if idx >= 0:
+            self._stats_window_combo.setCurrentIndex(idx)
+
         # Click gap
         self._update_click_gap_display()
 
@@ -257,6 +270,10 @@ class SettingsScreen(QWidget):
         )
         settings["recording.db_rotation_max_bytes"] = str(
             self._db_size_combo.currentData()
+        )
+
+        settings["recording.stats_window_minutes"] = str(
+            self._stats_window_combo.currentData()
         )
 
         # System settings
