@@ -1,9 +1,8 @@
 """
 Generate InputDNA.ico from UV-InputDNA.svg.
 
-Renders the SVG at multiple sizes and saves as a multi-resolution ICO file.
-Uses the light-theme variant (dark outlines) for best visibility in most
-OS contexts (Explorer, shortcuts, installer, Add/Remove Programs).
+Renders the SVG at each ICO size individually for crisp results,
+then saves as a multi-resolution ICO file.
 
 Called automatically by build.py. Can also be run standalone:
     python setup/svg_to_ico.py
@@ -22,7 +21,6 @@ from PIL import Image
 SETUP_DIR = Path(__file__).parent
 PROJECT_DIR = SETUP_DIR.parent
 
-# Light variant = dark outlines, visible on both light and dark backgrounds
 SVG_PATH = PROJECT_DIR / "support" / "logo" / "light" / "UV-InputDNA.svg"
 ICO_PATH = SETUP_DIR / "InputDNA.ico"
 
@@ -39,21 +37,15 @@ def _render_svg_to_pil(renderer: QSvgRenderer, size: int) -> Image.Image:
     renderer.render(painter)
     painter.end()
 
-    # QImage (ARGB32) → bytes → Pillow
     buf = qimage.bits().tobytes()
     return Image.frombytes("RGBA", (size, size), buf, "raw", "BGRA")
 
 
 def generate_ico() -> Path:
-    """Generate InputDNA.ico from UV-InputDNA.svg. Returns the ICO path.
-
-    Creates a QGuiApplication if one doesn't exist (needed by QSvgRenderer).
-    Safe to call from build.py which doesn't have a Qt app yet.
-    """
+    """Generate InputDNA.ico from UV-InputDNA.svg. Returns the ICO path."""
     if not SVG_PATH.exists():
         raise FileNotFoundError(f"SVG not found: {SVG_PATH}")
 
-    # QSvgRenderer needs a QGuiApplication — create one if none exists
     app = QGuiApplication.instance()
     if app is None:
         app = QGuiApplication(sys.argv)
@@ -62,14 +54,22 @@ def generate_ico() -> Path:
     if not renderer.isValid():
         raise RuntimeError(f"Failed to load SVG: {SVG_PATH}")
 
-    # Render at the largest size and let Pillow downscale for each ICO frame.
-    # Pillow's ICO save ignores append_images — it only uses `sizes` to
-    # auto-resize from the base image.
-    largest = _render_svg_to_pil(renderer, max(ICO_SIZES))
-    largest.save(
+    # Render each size individually from SVG for maximum sharpness
+    frames = []
+    for size in ICO_SIZES:
+        img = _render_svg_to_pil(renderer, size)
+        # Verify the frame isn't fully transparent (debug)
+        if img.getextrema()[3] == (0, 0):  # alpha channel min/max both 0
+            print(f"  WARNING: {size}x{size} frame is fully transparent!")
+        frames.append(img)
+
+    # Save: first frame is the base, rest go in append_images
+    # The largest frame should be first (Windows uses it as the primary)
+    frames.reverse()  # 256 first, 16 last
+    frames[0].save(
         str(ICO_PATH),
         format="ICO",
-        sizes=[(s, s) for s in ICO_SIZES],
+        append_images=frames[1:],
     )
 
     return ICO_PATH

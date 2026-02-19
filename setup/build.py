@@ -128,6 +128,12 @@ def build_pyinstaller():
         print(f"  ERROR: Expected exe not found: {exe_path}")
         sys.exit(1)
 
+    # Copy ICO to dist root so NSIS shortcuts can reference $INSTDIR\InputDNA.ico
+    # (PyInstaller puts --add-data files inside _internal/, not the exe directory)
+    dist_ico = DIST_DIR / APP_NAME / ICON_PATH.name
+    shutil.copy2(ICON_PATH, dist_ico)
+    print(f"  Copied {ICON_PATH.name} to {dist_ico.parent}")
+
     print(f"  Output: {exe_path}")
     return exe_path
 
