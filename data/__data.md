@@ -18,13 +18,16 @@ selects the correct path based on `sys.frozen`.
 📁 data/
   📝 __data.md
   📁 db/
-    🗄️ profiles.db             ← shared user profiles (gitignored)
-    🗄️ movements.db            ← headless mode fallback (gitignored)
-    📁 user_1/
-      🗄️ movements.db          ← Alice's recording data
-      🗄️ movements_20260211.db ← rotated archive
-    📁 user_2/
-      🗄️ movements.db          ← Bob's recording data
+    🗄️ profiles.db                       ← shared user profiles (gitignored)
+    📁 Uros_Vuruna_1990-06-20/
+      🗄️ mouse.db                        ← mouse recording data
+      🗄️ keyboard.db                     ← keyboard recording data
+      🗄️ session.db                      ← recording sessions + system events
+      🗄️ mouse_20260211.db              ← rotated archive
+    📁 Mladen_Vuruna_1963-07-05/
+      🗄️ mouse.db
+      🗄️ keyboard.db
+      🗄️ session.db
   📁 logs/
     (future log files)
 ```
@@ -35,39 +38,29 @@ selects the correct path based on `sys.frozen`.
 📁 %LOCALAPPDATA%\InputDNA\
   📁 db\
     🗄️ profiles.db
-    📁 user_1\
-      🗄️ movements.db
-    📁 user_2\
-      🗄️ movements.db
+    📁 Uros_Vuruna_1990-06-20\
+      🗄️ mouse.db
+      🗄️ keyboard.db
+      🗄️ session.db
   📁 logs\
 ```
 
 ### Per-user Database Isolation
 
-Each registered user gets their own subfolder: `db/user_{id}/`. This ensures:
+Each registered user gets their own subfolder named `Username_Surname_YYYY-MM-DD`.
+This ensures:
 - ML trains on one user's data only — no cross-contamination
 - Easy backup/deletion per user
 - DB rotation archives stay in the user's folder
 - `profiles.db` remains shared (stores all user profiles and settings)
 
-When running in headless mode (no GUI, `python main.py`), the fallback
-`db/movements.db` is used. See `config.get_user_db_path()` for the path logic.
+<a id="databases"></a>
 
-<a id="database"></a>
+## Per-user Databases
 
-## `movements.db` — Recording Database (Per-user)
+Each user folder contains three SQLite databases (all WAL mode):
 
-SQLite database (WAL mode) containing recorded human input data for a single user.
-Created by `database/schema.py` on first recording session for that user.
-
-**Database size estimate:** ~150-200 MB per month of typical desktop use (125 Hz mouse).
-
-<a id="tables"></a>
-
-### Tables
-
-<details>
-<summary>Mouse tables (click to expand)</summary>
+### `mouse.db` — Mouse Recording Data
 
 | Table | Description | Data Source |
 |-------|-------------|-------------|
@@ -78,11 +71,9 @@ Created by `database/schema.py` on first recording session for that user.
 | `drags` | Click-hold-move-release operations | `DragDetector` |
 | `drag_points` | Path coordinates during drags | `DragDetector` |
 | `scrolls` | Scroll wheel events | `EventProcessor` |
+| `metadata` | Key-value store (path_encoding, etc.) | `schema.py` |
 
-</details>
-
-<details>
-<summary>Keyboard tables (click to expand)</summary>
+### `keyboard.db` — Keyboard Recording Data
 
 | Table | Description | Data Source |
 |-------|-------------|-------------|
@@ -90,28 +81,24 @@ Created by `database/schema.py` on first recording session for that user.
 | `key_transitions` | Delay between consecutive keys (scan code pairs) | `KeyboardProcessor` |
 | `shortcuts` | Keyboard shortcut timing profiles (Ctrl+C, Alt+Tab, etc.) | `KeyboardProcessor` |
 
-</details>
-
-<details>
-<summary>Meta tables (click to expand)</summary>
+### `session.db` — Session & System Metadata
 
 | Table | Description | Data Source |
 |-------|-------------|-------------|
 | `recording_sessions` | Start/end time + counts for each recording period | `main.py` |
-| `metadata` | Key-value store for settings and stats | Various |
-
-</details>
+| `system_events` | System state changes (mouse speed, resolution, layout) | `SystemMonitor` |
+| `metadata` | Key-value store for session-level config/stats | Various |
 
 <a id="wal-files"></a>
 
 ## WAL Files
 
-During active recording, SQLite creates sidecar files:
+During active recording, SQLite creates sidecar files for each database:
 
 | File | Purpose |
 |------|---------|
-| `movements.db-wal` | Write-Ahead Log — buffered writes before merge |
-| `movements.db-shm` | Shared memory — coordination for WAL access |
+| `*.db-wal` | Write-Ahead Log — buffered writes before merge |
+| `*.db-shm` | Shared memory — coordination for WAL access |
 
 > **Warning:** Do NOT delete WAL/SHM files while the recorder is running.
 > They get merged back into the main database file on clean shutdown.
@@ -120,9 +107,9 @@ During active recording, SQLite creates sidecar files:
 
 ## Backup
 
-The database is the single most valuable file in this project — it contains
+The databases are the single most valuable files in this project — they contain
 all your recorded behavior data that cannot be re-collected without repeating
-the recording sessions. Back it up periodically.
+the recording sessions. Back them up periodically.
 
 <a id="gitignore"></a>
 

@@ -50,7 +50,16 @@ since thousands of these are created per second during active use.
 
 Processed records produced by processors after analyzing raw events.
 Each has a `write_to_db(conn)` method that knows how to INSERT itself
-into the correct table(s).
+into the correct table(s), and a `_db_target` class attribute that tells
+the writer which database to use.
+
+**Database routing via `_db_target`:**
+
+| `_db_target` | Database | Record classes |
+|--------------|----------|---------------|
+| `"mouse"` | mouse.db | MovementSession, ClickSequence, DragRecord, ScrollEvent |
+| `"keyboard"` | keyboard.db | KeystrokeRecord, KeyTransitionRecord, ShortcutRecord |
+| `"session"` | session.db | SystemEventRecord, RecordingSessionRecord |
 
 **Mouse records:**
 
@@ -86,7 +95,9 @@ flowchart LR
     OS((OS)) -- "input event" --> L[Listener]
     L -- "Raw Event\n(events.py)" --> P[Processor]
     P -- "Record\n(sessions.py)" --> W[DB Writer]
-    W -- "write_to_db()" --> DB[(SQLite)]
+    W -- "_db_target routing" --> M[(mouse.db)]
+    W -- "_db_target routing" --> K[(keyboard.db)]
+    W -- "_db_target routing" --> S[(session.db)]
 ```
 
 **Shared helpers:**
@@ -97,4 +108,4 @@ flowchart LR
 
 > **Note:** Raw events are lightweight and short-lived (queue transit only).
 > Processed records are richer and persist to disk via `write_to_db()`.
-> Path points use delta encoding — see metadata key `path_encoding=delta_v1`.
+> Path points use delta encoding — see metadata key `path_encoding=delta_v1` in mouse.db.

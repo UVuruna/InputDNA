@@ -379,6 +379,47 @@ except SpecificError as e:
 
 ---
 
+#### Rule #14: Commit After Completing Work
+
+**After finishing a task, stage changes and create commits.**
+
+**Commit message format:** `MAJOR.MINOR.PATCH description`
+
+- Follow the existing version sequence — check `git log --oneline -5` for the latest version number
+- Increment the patch number by 10 for each commit (e.g., `0.1.750` → `0.1.760`)
+- Description is short, English, starts with a noun or verb
+- Use em dash `—` to separate additional details when needed
+
+**Commit examples from this repo:**
+```
+0.1.750 DPI raw input, key name fix — bypass OS pointer speed, resolve control chars
+0.1.740 Remove all fixed sizing — dialogs and labels use minimum instead
+0.1.530 Click speed calibration dialog
+0.1.470 Documentation — update folder docs for all changed modules
+```
+
+**Splitting into multiple commits:**
+- Group related changes into logical units
+- Each commit should represent one cohesive change
+- Complex work = multiple commits, each with its own version increment
+- Simple work = single commit
+
+**Procedure:**
+1. Check the latest version with `git log --oneline -3`
+2. Group changes into logical commits (by topic/module)
+3. Stage specific files for each commit (`git add file1 file2`, NOT `git add .`)
+4. Commit with the next version number and descriptive message
+5. Repeat for remaining groups if multiple commits are needed
+
+**Example — complex task producing 3 commits:**
+```
+0.1.760 Schema update — add new columns to sessions table
+0.1.770 Session processor — implement new timeout logic
+0.1.780 Documentation — update folder docs for schema and processor changes
+```
+
+---
+
 ### Guidelines (Follow When Applicable)
 
 #### Guideline #1: Verify Before Claiming
@@ -698,6 +739,7 @@ The same physical key always has the same scan code regardless of language layou
 2. **Verify no duplicates** introduced
 3. **Check dependent modules** — did change break anything?
 4. **Update implementation-plan.md** if architecture changed
+5. **Stage and commit** — follow Rule #14 (version-numbered commits, logical grouping)
 
 ---
 
@@ -715,3 +757,4 @@ The same physical key always has the same scan code regardless of language layou
 10. **When unsure → ASK** — Better 100 questions than 1 bug
 11. **No capacity lies** — Honest "I can't" > fake "I did"
 12. **No error masking** — Hidden bugs become massive problems
+13. **Commit after work** — Version-numbered commits, logical grouping (Rule #14)
