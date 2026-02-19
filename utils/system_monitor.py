@@ -161,13 +161,20 @@ class PollingRateEstimator:
             self._calculate()
 
     def _calculate(self):
-        """Calculate polling rate from collected intervals."""
+        """Calculate polling rate from collected intervals.
+
+        Uses 10th percentile instead of median.  The shortest intervals
+        represent back-to-back hardware polls where the cursor actually
+        moved.  Slow mouse movement produces longer gaps (zero-delta
+        polls are suppressed by Windows), inflating the median.
+        """
         sorted_intervals = sorted(self._intervals_ns)
-        # Use median to avoid outlier influence
-        median_ns = sorted_intervals[len(sorted_intervals) // 2]
-        if median_ns > 0:
-            self._estimated_hz = round(1_000_000_000 / median_ns)
-            logger.info(f"Mouse polling rate estimated: ~{self._estimated_hz} Hz")
+        idx = max(0, len(sorted_intervals) // 10)
+        p10_ns = sorted_intervals[idx]
+        if p10_ns > 0:
+            self._estimated_hz = round(1_000_000_000 / p10_ns)
+            logger.info(f"Mouse polling rate estimated: ~{self._estimated_hz} Hz "
+                        f"(p10={p10_ns/1e6:.2f} ms from {len(sorted_intervals)} samples)")
 
     @property
     def estimated_hz(self) -> Optional[int]:
