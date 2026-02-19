@@ -12,7 +12,12 @@ Thread architecture (during recording):
     Thread 2: keyboard listener (pynput hook)
     Thread 3: event processor (dispatches events)
     Thread 4: database writer (batched inserts)
-    Thread 5: tray icon (pystray, always visible after login)
+    Thread 5: tray icon (pystray, always visible while app runs)
+
+Autostart mode (--autostart flag):
+    When launched with Windows startup and a default user is configured,
+    the app auto-logs in, starts recording, and stays in the system tray
+    without showing the GUI window.
 """
 
 import sys
@@ -46,7 +51,7 @@ from gui.validation_screen import ValidationScreen
 from gui.calibration_dialog import ClickCalibrationDialog
 from gui.dpi_dialog import DpiMeasurementDialog
 from gui.styles import get_stylesheet
-from gui.user_db import UserProfile
+from gui.user_db import UserProfile, login as db_login
 from gui.user_settings import load_settings
 from gui.global_settings import load_globals
 
@@ -205,6 +210,7 @@ class MainWindow(QMainWindow):
         self._tray: TrayIcon | None = None
         self._tray_thread: threading.Thread | None = None
         self._system_monitor: SystemMonitor | None = None
+        self._force_quit = False  # True when Quit from tray — bypass minimize
 
         # ── Stacked widget for screen navigation ──────────────
         self._stack = QStackedWidget()
@@ -213,6 +219,7 @@ class MainWindow(QMainWindow):
         # Screen 0: Login
         self._login_screen = LoginScreen()
         self._login_screen.login_success.connect(self._on_login)
+        self._login_screen.back_to_dashboard.connect(self._show_dashboard)
         self._stack.addWidget(self._login_screen)
 
         # Screens 1-3 are created after login (need user_id)
@@ -227,6 +234,9 @@ class MainWindow(QMainWindow):
         # Polling rate check timer (runs after login until estimation completes)
         self._polling_check_timer = QTimer(self)
         self._polling_check_timer.timeout.connect(self._check_polling_rate)
+
+        # Start tray icon immediately (always visible while app runs)
+        self._start_tray()
 
         # Start on login screen
         self._stack.setCurrentIndex(self._LOGIN)
@@ -258,8 +268,8 @@ class MainWindow(QMainWindow):
         # Populate system info immediately (before recording starts)
         self._dashboard.update_system_info(get_all_state())
 
-        # Start tray icon (visible for entire logged-in session)
-        self._start_tray()
+        # Mark active user on login screen (for Home navigation)
+        self._login_screen.set_active_user(profile)
 
         self._stack.setCurrentIndex(self._DASHBOARD)
 
@@ -278,6 +288,7 @@ class MainWindow(QMainWindow):
         self._dashboard.settings_signal.connect(self._show_settings)
         self._dashboard.validate_model_signal.connect(self._show_validation)
         self._dashboard.logout_signal.connect(self._on_logout)
+        self._dashboard.home_signal.connect(self._show_login)
         self._stack.addWidget(self._dashboard)
 
         # Screen 2: Settings
@@ -312,12 +323,15 @@ class MainWindow(QMainWindow):
                 self._dashboard.update_system_info(get_all_state(), hz)
 
     def _on_logout(self):
-        """Stop recording if active, remove tray, reset config, go back to login."""
+        """Stop recording if active, reset tray to default, go back to login."""
         if self._recorder:
             self._stop_recording()
 
         self._polling_check_timer.stop()
-        self._stop_tray()
+
+        # Reset tray to default icon (tray stays alive)
+        if self._tray:
+            self._tray.set_default()
 
         config.reset_to_defaults()
         config.ESTIMATED_POLLING_HZ = None
@@ -325,9 +339,17 @@ class MainWindow(QMainWindow):
         self._user = None
         logger.info("User logged out")
 
+        # Clear login screen active user state
+        self._login_screen.clear_active_user()
+        self._login_screen._refresh_user_list()
+
         self._stack.setCurrentIndex(self._LOGIN)
 
     # ── Screen navigation ──────────────────────────────────────
+
+    def _show_login(self):
+        """Navigate to login screen (from Home button). Recording continues."""
+        self._stack.setCurrentIndex(self._LOGIN)
 
     def _show_dashboard(self):
         self._stack.setCurrentIndex(self._DASHBOARD)
@@ -378,7 +400,7 @@ class MainWindow(QMainWindow):
         logger.info("Recording stopped from dashboard")
 
     def _update_stats(self):
-        """Update dashboard stats, system info, and tray idle state (runs on timer)."""
+        """Update dashboard stats, system info, and tray/login idle state (runs on timer)."""
         if self._recorder and self._dashboard:
             self._dashboard.update_stats(
                 self._recorder.movement_count,
@@ -392,25 +414,31 @@ class MainWindow(QMainWindow):
                     config.ESTIMATED_POLLING_HZ,
                 )
 
-            # Idle detection — cosmetic tray icon update
+            # Idle detection — cosmetic tray icon + login screen status
+            last_ns = self._recorder.last_event_ns
+            idle_ns = config.IDLE_ICON_TIMEOUT_S * 1_000_000_000
+            is_idle = bool(last_ns and (now_ns() - last_ns) > idle_ns)
+
             if self._tray:
-                last_ns = self._recorder.last_event_ns
-                idle_ns = config.IDLE_ICON_TIMEOUT_S * 1_000_000_000
-                if last_ns and (now_ns() - last_ns) > idle_ns:
+                if is_idle:
                     self._tray.set_idle()
                 else:
                     self._tray.set_recording()
 
+            # Update login screen status (visible when user navigated Home)
+            self._login_screen.update_recording_status(True, is_idle)
+
     # ── Tray icon ──────────────────────────────────────────────
 
     def _start_tray(self):
-        """Start system tray icon in a background thread (visible until logout)."""
+        """Start system tray icon in a background thread (always visible)."""
         if self._tray:
             return
         self._tray = TrayIcon(
             on_stop_recording=self._tray_stop_recording,
             on_quit=self._tray_quit_app,
             get_stats=self._get_stats_text,
+            on_show_gui=self._tray_show_gui,
         )
         self._tray_thread = threading.Thread(
             target=self._tray.run,
@@ -420,19 +448,34 @@ class MainWindow(QMainWindow):
         self._tray_thread.start()
 
     def _stop_tray(self):
-        """Remove the tray icon (on logout or app close)."""
+        """Remove the tray icon (only on actual app exit)."""
         if self._tray:
             self._tray.stop()
             self._tray = None
             self._tray_thread = None
+
+    def _tray_show_gui(self):
+        """Called from tray thread — show/raise the GUI window."""
+        QTimer.singleShot(0, self._show_window)
+
+    def _show_window(self):
+        """Show and raise the window (runs on Qt thread)."""
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
 
     def _tray_stop_recording(self):
         """Called from tray thread — stop recording."""
         QTimer.singleShot(0, self._stop_recording_from_tray)
 
     def _tray_quit_app(self):
-        """Called from tray thread — close entire application."""
-        QTimer.singleShot(0, self.close)
+        """Called from tray thread — force-close entire application."""
+        QTimer.singleShot(0, self._force_close)
+
+    def _force_close(self):
+        """Force-close the app (from tray Quit), bypassing minimize-on-close."""
+        self._force_quit = True
+        self.close()
 
     def _stop_recording_from_tray(self):
         """Stop recording and update dashboard (runs on Qt thread)."""
@@ -492,7 +535,22 @@ class MainWindow(QMainWindow):
     # ── Window close ───────────────────────────────────────────
 
     def closeEvent(self, event):
-        """Smart close: navigate back on secondary screens, exit on login/dashboard."""
+        """Close behavior: minimize-on-close hides to tray, otherwise exits."""
+        # Tray Quit → force close, always exit
+        if self._force_quit:
+            if self._recorder:
+                self._stop_recording()
+            self._stop_tray()
+            event.accept()
+            return
+
+        # Minimize on close → hide window to tray
+        if config.MINIMIZE_ON_CLOSE:
+            self.hide()
+            event.ignore()
+            return
+
+        # Default: navigate back from settings/validation, exit from login/dashboard
         current = self._stack.currentIndex()
         if current in (self._SETTINGS, self._VALIDATION):
             self._show_dashboard()
@@ -508,10 +566,13 @@ class MainWindow(QMainWindow):
 def _apply_global_settings():
     """Load global settings from profiles.db and apply to config module."""
     settings = load_globals()
-    data_dir = settings.get("storage.data_dir", "")
-    config.CUSTOM_USER_DATA_DIR = data_dir
+    config.CUSTOM_USER_DATA_DIR = settings.get("storage.data_dir", "")
+    config.DEFAULT_USER = settings.get("startup.default_user", "")
     config.START_WITH_WINDOWS = settings.get(
         "system.start_with_windows", ""
+    ).lower() == "true"
+    config.MINIMIZE_ON_CLOSE = settings.get(
+        "system.minimize_on_close", ""
     ).lower() == "true"
 
     # Apply theme
@@ -542,7 +603,25 @@ def main():
             app.setWindowIcon(QIcon(str(ico_path)))
 
     window = MainWindow()
-    window.show()
+
+    # Autostart mode: --autostart flag + default user configured
+    autostart = "--autostart" in sys.argv and config.DEFAULT_USER
+    if autostart:
+        profile = db_login(config.DEFAULT_USER)
+        if profile:
+            logger.info(f"Autostart: logging in as {profile.username}")
+            window._on_login(profile)
+            # Trigger recording through dashboard (updates UI + starts recorder)
+            window._dashboard._start_recording()
+            # Stay in tray — don't show GUI window
+        else:
+            logger.warning(
+                f"Autostart: default user '{config.DEFAULT_USER}' not found, "
+                "showing login screen"
+            )
+            window.show()
+    else:
+        window.show()
 
     sys.exit(app.exec())
 

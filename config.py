@@ -192,6 +192,14 @@ USER_DPI = 800
 # Auto-start recording on Windows login.
 START_WITH_WINDOWS = False
 
+# Minimize to system tray on close (instead of exiting).
+# When enabled, the X button hides the window — only tray Quit exits.
+MINIMIZE_ON_CLOSE = False
+
+# Default user for auto-login (username string, empty = disabled).
+# Used with START_WITH_WINDOWS for unattended startup.
+DEFAULT_USER = ""
+
 # Custom base directory for per-user recording data.
 # When set (non-empty), user folders are created here instead of DB_DIR.
 # profiles.db always stays in DB_DIR (needed for login before this is applied).

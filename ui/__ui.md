@@ -1,8 +1,8 @@
 # ui/
 
 System tray interface for the application. The tray icon is always visible
-after login, providing visual feedback about recording state. It persists
-for the entire logged-in session (not just during recording).
+while the app is running (from startup to exit), providing visual feedback
+about recording state. Double-click opens the GUI window.
 
 <a id="folder-structure"></a>
 
@@ -43,7 +43,7 @@ Theme is detected once at startup.
 
 | State | File | Description |
 |-------|------|-------------|
-| Default | `{theme}/InputDNA.png` | App logo (initial state after login, before first recording) |
+| Default | `{theme}/InputDNA.png` | App logo (initial state, before login or between sessions) |
 | Recording | `{theme}/InputDNA-start.png` | Actively recording input |
 | Idle | `{theme}/InputDNA-pause.png` | Recording but no input for 60+ seconds (cosmetic) |
 | Stopped | `{theme}/InputDNA-stop.png` | Recording stopped |
@@ -60,28 +60,33 @@ the respective Windows taskbar background:
 Loaded at startup by `tray_icon.py` via Pillow. pystray handles
 resizing to the appropriate system tray size (16-32px depending on DPI).
 
+**Double-click:** Opens/raises the GUI window (default action via invisible
+menu item with `default=True`). Useful when window is hidden (minimize on close)
+or when app started in autostart mode (tray only, no window).
+
 **Right-click menu:**
 
 | Menu Item | Visible | Action |
 |-----------|---------|--------|
 | **Stop Recording** | During recording | Stops recording, icon → red. |
 | **Stats** | Always | Shows a Windows toast notification with current counts (or "Not recording"). |
-| **Quit** | Always | Closes the entire application. |
+| **Quit** | Always | Force-closes the entire application (bypasses minimize on close). |
 
 <a id="lifecycle"></a>
 
 ## Lifecycle
 
 ```
-Login  →  Tray appears (app logo/default)
-Start  →  Green (recording) → Yellow after 60s idle → Green on input
-Stop   →  Red (stopped) — tray stays visible
-Logout →  Tray removed
-Close  →  Tray removed
+App start  →  Tray appears (app logo/default)
+Login      →  (tray stays, no change until recording starts)
+Start      →  Green (recording) → Yellow after 60s idle → Green on input
+Stop       →  Red (stopped) — tray stays visible
+Logout     →  Tray resets to default icon (stays visible)
+Quit       →  Tray removed (only via right-click → Quit)
 ```
 
 The tray icon runs in a daemon thread (`pystray.Icon.run()` blocks).
-It persists from login to logout/close, independent of recording state.
+It persists for the entire app lifetime — from startup to Quit.
 
 <a id="tray-at-a-glance"></a>
 

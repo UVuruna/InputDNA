@@ -29,6 +29,7 @@ class MainDashboard(QWidget):
     validate_model_signal = Signal()
     settings_signal = Signal()
     logout_signal = Signal()
+    home_signal = Signal()
 
     def __init__(self, user: UserProfile, parent=None):
         super().__init__(parent)
@@ -53,6 +54,11 @@ class MainDashboard(QWidget):
 
         # ── Header ─────────────────────────────────────────
         header = QHBoxLayout()
+
+        home_btn = QPushButton("Home")
+        home_btn.setToolTip("Go to login screen (recording continues)")
+        home_btn.clicked.connect(self.home_signal.emit)
+        header.addWidget(home_btn)
 
         title = QLabel("Human Input Simulator")
         title.setObjectName("title")

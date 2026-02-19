@@ -1,9 +1,9 @@
 """
 System tray icon for application status.
 
-Always visible while the app is running (after login). Shows custom
-InputDNA logos in the taskbar notification area, loaded from light/
-or dark/ subfolder based on the current Windows theme.
+Always visible while the app is running. Shows custom InputDNA logos
+in the taskbar notification area, loaded from light/ or dark/ subfolder
+based on the current Windows theme.
 
 Icon states:
   {theme}/InputDNA.png        = default (app logo, before first recording)
@@ -11,6 +11,7 @@ Icon states:
   {theme}/InputDNA-pause.png  = recording but input idle
   {theme}/InputDNA-stop.png   = stopped recording
 
+Double-click: opens the GUI window.
 Right-click menu: Stop Recording (during recording), Stats, Quit.
 
 pystray requires the icon to run on the main thread on some
@@ -68,13 +69,15 @@ class TrayIcon:
     """
     System tray icon with status and controls.
 
-    Always visible after login. Starts with the default app logo.
+    Always visible while the app is running. Starts with the default
+    app logo. Double-click opens the GUI window.
 
     Usage:
         tray = TrayIcon(
             on_stop_recording=my_stop_fn,
             on_quit=my_quit_fn,
             get_stats=my_stats_fn,
+            on_show_gui=my_show_fn,
         )
         tray.run()  # Blocks
     """
@@ -82,16 +85,25 @@ class TrayIcon:
     def __init__(self,
                  on_stop_recording: Callable[[], None],
                  on_quit: Callable[[], None],
-                 get_stats: Optional[Callable[[], str]] = None):
+                 get_stats: Optional[Callable[[], str]] = None,
+                 on_show_gui: Optional[Callable[[], None]] = None):
         self._on_stop_recording = on_stop_recording
         self._on_quit = on_quit
         self._get_stats = get_stats
+        self._on_show_gui = on_show_gui
         self._recording = False
         self._icon: Optional[pystray.Icon] = None
 
     def run(self):
         """Start the tray icon with default app logo. Blocks until quit."""
         menu = pystray.Menu(
+            # Default action (double-click) — invisible menu item
+            pystray.MenuItem(
+                text="Show",
+                action=self._show_gui,
+                default=True,
+                visible=False,
+            ),
             pystray.MenuItem(
                 text="Stop Recording",
                 action=self._stop_recording,
@@ -118,6 +130,13 @@ class TrayIcon:
         logger.info("System tray icon started")
         self._icon.run()  # Blocks
 
+    def set_default(self):
+        """Set icon to default (app logo) state — no user logged in."""
+        self._recording = False
+        if self._icon is not None:
+            self._icon.icon = _icons["default"]
+            self._icon.title = "InputDNA"
+
     def set_recording(self):
         """Set icon to recording (green) state."""
         self._recording = True
@@ -137,6 +156,11 @@ class TrayIcon:
         if self._icon is not None:
             self._icon.icon = _icons["stopped"]
             self._icon.title = "InputDNA — Not Recording"
+
+    def _show_gui(self, icon, item):
+        """Default action (double-click) — open the GUI window."""
+        if self._on_show_gui:
+            self._on_show_gui()
 
     def _stop_recording(self, icon, item):
         """Menu: Stop Recording clicked."""

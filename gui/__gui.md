@@ -35,6 +35,7 @@ flowchart LR
     LOGIN -- "new user" --> REG[Register Form]
     REG --> DASH
 
+    DASH -- "Home" --> LOGIN
     DASH --> REC["Start/Stop\nRecording"]
     DASH --> TRAIN["Train\nModel"]
     DASH --> VAL["Validate\nModel"]
@@ -43,6 +44,10 @@ flowchart LR
     SETTINGS --> CAL_CLICK["Click Speed\nCalibration"]
     SETTINGS --> CAL_DPI["DPI\nMeasurement"]
 ```
+
+> **Note:** The Home button navigates to the login screen WITHOUT stopping
+> recording. This allows access to Global Settings while recording runs.
+> A "← Dashboard" button appears on the login screen to return.
 
 ### Screen 1: Login / Register
 
@@ -60,8 +65,13 @@ personalized robot. Profile data stored locally in SQLite (`profiles.db`).
 Returning users log in with username only. Each user gets their own
 recording databases at `data/db/Username_Surname_YYYY-MM-DD/`.
 
+When a user is already logged in (navigated here via Home button), the Login
+button is disabled and a recording status indicator appears at the bottom
+(green/yellow tray icon + text). A "← Dashboard" button appears at the top
+to return to the active session.
+
 A **Settings** button (bottom-right) opens the Global Settings dialog for
-application-wide options (data location, start with Windows).
+application-wide options (default user, autostart, minimize on close, etc.).
 
 ### Screen 2: Main Dashboard
 
@@ -88,10 +98,21 @@ Stored in `global_settings` table in `profiles.db`. Loaded at app start before l
 |---------|---------|---------|
 | Theme | Dropdown: Dark / Light / Windows | Dark |
 | Data location | Browse/Reset | `data/db/` |
-| Start with Windows | Checkbox | Off |
+| Default user | Dropdown: None + all profiles | None |
+| Start recording with Windows startup | Checkbox | Off |
+| Minimize on close | Checkbox | Off |
 
 Theme changes apply immediately (live switching) without restart.
 The "Windows" option follows the system theme (light/dark) detected from the registry.
+
+**Default user + Start with Windows:** When both are configured, the app
+auto-logs in the default user, auto-starts recording, and stays in the
+system tray without showing the GUI window. The installed EXE is registered
+in the Windows Run key with `--autostart` flag.
+
+**Minimize on close:** When enabled, the window close button (X) hides the
+window to the system tray instead of exiting. Only right-click → Quit on
+the tray icon actually closes the application.
 
 ### Screen 3: Per-User Settings
 
@@ -138,9 +159,11 @@ Functions: `save_global()`, `save_globals()`, `load_globals()`,
 
 QDialog opened from the login screen's Settings button. Contains
 theme selector (Dark/Light/Windows), data location (Browse/Reset),
-and Start with Windows checkbox. Theme changes apply live via
+default user dropdown, start recording with Windows startup checkbox,
+and minimize on close checkbox. Theme changes apply live via
 `QApplication.instance().setStyleSheet()`. Also contains Windows
-registry autostart functions.
+registry autostart functions (`_set_autostart` adds `--autostart`
+flag for the frozen EXE).
 
 ### `login_screen.py` — Login / Register Page
 
@@ -149,10 +172,20 @@ date of birth. Login requires username only. Profile stored in
 `profiles` table in SQLite. Settings button (bottom-right) opens
 the Global Settings dialog.
 
+When navigated to via the Home button (while a user is logged in):
+- "← Dashboard" button appears at the top to return
+- Login button is disabled (grayed) to prevent user switching
+- Recording status indicator shows at the bottom (green/yellow
+  tray icon + status text)
+- Registration of new users still works
+
+Signals: `login_success(UserProfile)`, `back_to_dashboard`.
+
 ### `main_dashboard.py` — Main Control Panel
 
 Action buttons + status area. Shows current user info, recording
-status, model status, and system info panel.
+status, model status, and system info panel. Home button (top-left)
+navigates to the login screen without stopping recording.
 
 **System Info panel** displays live system data:
 
@@ -243,8 +276,9 @@ folder (active + rotated archives) and copies them with `shutil.copy2`.
 
 | Package | Purpose | Technology | When it runs |
 |---------|---------|------------|--------------|
-| `ui/` | System tray icon (minimal) | pystray + Pillow | During recording |
+| `ui/` | System tray icon (minimal) | pystray + Pillow | Always (entire app lifetime) |
 | `gui/` | Full desktop application | PySide6 | User-facing dashboard |
 
-> **Note:** These are separate concerns. The tray icon runs silently during recording.
-> The GUI is the main application for managing profiles, starting recording, training, and validation.
+> **Note:** These are separate concerns. The tray icon runs in the background
+> for the entire app lifetime. Double-click opens the GUI. The GUI is the main
+> application for managing profiles, starting recording, training, and validation.

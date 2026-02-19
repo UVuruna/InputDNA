@@ -6,9 +6,12 @@ First screen shown on app start. Two tabs:
 - Register: create new profile (username, surname, date of birth)
 
 On successful login, emits signal with UserProfile to switch to dashboard.
+When a user is already logged in (navigated here via Home), shows recording
+status indicator and disables login for other users.
 """
 
 from datetime import date
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
@@ -16,9 +19,13 @@ from PySide6.QtWidgets import (
     QSizePolicy, QComboBox,
 )
 from PySide6.QtCore import Signal, QDate, Qt
+from PySide6.QtGui import QPixmap
 
 from gui.user_db import UserProfile, register, login, get_all_profiles
 from gui.global_settings_dialog import GlobalSettingsDialog
+from ui.tray_icon import detect_windows_theme
+
+_UI_DIR = Path(__file__).resolve().parent.parent / "ui"
 
 
 class LoginScreen(QWidget):
@@ -27,14 +34,37 @@ class LoginScreen(QWidget):
     # Emitted on successful login with user profile
     login_success = Signal(object)
 
+    # Emitted when user clicks "Back to Dashboard" (while logged in)
+    back_to_dashboard = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._active_user: UserProfile | None = None
+        self._is_idle = False
         self._build_ui()
+        self._load_status_icons()
+
+    def _load_status_icons(self):
+        """Load recording/idle status icons from tray icon PNGs."""
+        theme = detect_windows_theme()
+        theme_dir = _UI_DIR / theme
+        self._icon_recording = QPixmap(str(theme_dir / "InputDNA-start.png"))
+        self._icon_idle = QPixmap(str(theme_dir / "InputDNA-pause.png"))
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
         layout.setContentsMargins(60, 40, 60, 40)
+
+        # ── Top row: Back to Dashboard button (hidden by default) ──
+        top_row = QHBoxLayout()
+        self._back_btn = QPushButton("\u2190 Dashboard")
+        self._back_btn.setToolTip("Return to the active user's dashboard")
+        self._back_btn.clicked.connect(self.back_to_dashboard.emit)
+        self._back_btn.setVisible(False)
+        top_row.addWidget(self._back_btn)
+        top_row.addStretch()
+        layout.addLayout(top_row)
 
         # Title
         title = QLabel("Human Input Simulator")
@@ -57,6 +87,26 @@ class LoginScreen(QWidget):
         layout.addWidget(tabs, alignment=Qt.AlignCenter)
 
         layout.addStretch()
+
+        # ── Recording status indicator (hidden by default) ─────────
+        self._status_row = QHBoxLayout()
+        self._status_row.setAlignment(Qt.AlignCenter)
+
+        self._status_icon_label = QLabel()
+        self._status_icon_label.setFixedSize(24, 24)
+        self._status_icon_label.setScaledContents(True)
+        self._status_row.addWidget(self._status_icon_label)
+
+        self._status_text_label = QLabel()
+        self._status_text_label.setObjectName("info-value")
+        self._status_row.addWidget(self._status_text_label)
+
+        self._status_widget = QWidget()
+        self._status_widget.setLayout(self._status_row)
+        self._status_widget.setVisible(False)
+        layout.addWidget(self._status_widget, alignment=Qt.AlignCenter)
+
+        layout.addSpacing(10)
 
         # Settings button — bottom right
         settings_row = QHBoxLayout()
@@ -85,10 +135,10 @@ class LoginScreen(QWidget):
 
         lay.addSpacing(10)
 
-        btn = QPushButton("Login")
-        btn.setObjectName("primary")
-        btn.clicked.connect(self._do_login)
-        lay.addWidget(btn)
+        self._login_btn = QPushButton("Login")
+        self._login_btn.setObjectName("primary")
+        self._login_btn.clicked.connect(self._do_login)
+        lay.addWidget(self._login_btn)
 
         lay.addStretch()
         return w
@@ -146,6 +196,14 @@ class LoginScreen(QWidget):
         return age
 
     def _do_login(self):
+        if self._active_user:
+            QMessageBox.information(
+                self, "User Active",
+                f"{self._active_user.username} ({self._active_user.surname}) "
+                f"is currently logged in.\nLog out first to switch users.",
+            )
+            return
+
         username = self._login_combo.currentData()
         if not username:
             QMessageBox.warning(self, "Error", "No user selected.\nPlease register first.")
@@ -171,9 +229,59 @@ class LoginScreen(QWidget):
         if ok:
             QMessageBox.information(self, "Success", msg)
             self._refresh_user_list()
-            # Auto-login after registration
-            profile = login(username)
-            if profile:
-                self.login_success.emit(profile)
+            # Auto-login after registration (only if no active user)
+            if not self._active_user:
+                profile = login(username)
+                if profile:
+                    self.login_success.emit(profile)
         else:
             QMessageBox.warning(self, "Error", msg)
+
+    # ── Active user / recording status management ──────────────
+
+    def set_active_user(self, profile: UserProfile):
+        """Mark a user as active — disables login, shows back button."""
+        self._active_user = profile
+        self._back_btn.setVisible(True)
+        self._login_btn.setEnabled(False)
+        self._login_btn.setToolTip(
+            f"{profile.username} is logged in — log out first to switch users"
+        )
+        self._status_widget.setVisible(True)
+        self._update_status_display()
+
+    def clear_active_user(self):
+        """Clear active user — re-enables login, hides status."""
+        self._active_user = None
+        self._is_idle = False
+        self._back_btn.setVisible(False)
+        self._login_btn.setEnabled(True)
+        self._login_btn.setToolTip("")
+        self._status_widget.setVisible(False)
+
+    def update_recording_status(self, is_recording: bool, is_idle: bool):
+        """Update recording status indicator (called from stats timer)."""
+        self._is_idle = is_idle
+        if self._active_user:
+            self._update_status_display(is_recording)
+
+    def _update_status_display(self, is_recording: bool = True):
+        """Refresh the status icon and text."""
+        user = self._active_user
+        if not user:
+            return
+        if is_recording and self._is_idle:
+            self._status_icon_label.setPixmap(self._icon_idle)
+            self._status_text_label.setText(
+                f"Recording (idle): {user.username} ({user.surname})"
+            )
+        elif is_recording:
+            self._status_icon_label.setPixmap(self._icon_recording)
+            self._status_text_label.setText(
+                f"Recording: {user.username} ({user.surname})"
+            )
+        else:
+            self._status_icon_label.setPixmap(self._icon_idle)
+            self._status_text_label.setText(
+                f"Logged in: {user.username} ({user.surname})"
+            )

@@ -4,7 +4,9 @@ Global settings dialog — application-wide settings accessible from login scree
 Contains settings that are NOT per-user:
 - Appearance theme (dark / light / auto)
 - Data storage location
-- Start with Windows
+- Default user for auto-login
+- Start with Windows (auto-login + auto-record)
+- Minimize on close (X → tray instead of exit)
 """
 
 import logging
@@ -20,6 +22,7 @@ from PySide6.QtCore import Qt
 
 import config
 from gui.global_settings import save_globals, load_globals
+from gui.user_db import get_all_profiles
 from gui.styles import get_stylesheet
 
 logger = logging.getLogger(__name__)
@@ -41,9 +44,17 @@ def _is_autostart_enabled() -> bool:
 
 
 def _set_autostart(enabled: bool) -> None:
-    """Enable or disable Windows autostart for InputDNA."""
+    """Enable or disable Windows autostart for InputDNA.
+
+    Adds --autostart flag so the app knows it was launched at boot
+    (auto-login default user, auto-record, stay in tray).
+    """
     import sys
-    exe_path = sys.executable if getattr(sys, 'frozen', False) else f'"{sys.executable}" "{__file__}"'
+    if getattr(sys, 'frozen', False):
+        exe_path = f'"{sys.executable}" --autostart'
+    else:
+        # Dev mode — not used for real autostart, user installs the app
+        exe_path = f'"{sys.executable}" "{__file__}"'
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE)
         if enabled:
@@ -117,15 +128,36 @@ class GlobalSettingsDialog(QDialog):
         storage_layout.addLayout(path_row, 0, 1)
         layout.addWidget(storage_group)
 
-        # ── System ──────────────────────────────────────────
-        sys_group = QGroupBox("System")
-        sys_layout = QGridLayout(sys_group)
-        sys_layout.setSpacing(10)
+        # ── Startup ─────────────────────────────────────────
+        startup_group = QGroupBox("Startup")
+        startup_layout = QGridLayout(startup_group)
+        startup_layout.setSpacing(10)
 
-        self._autostart_check = QCheckBox("Start with Windows")
-        sys_layout.addWidget(self._autostart_check, 0, 0, 1, 2)
+        startup_layout.addWidget(QLabel("Default user:"), 0, 0)
+        self._default_user_combo = QComboBox()
+        self._default_user_combo.addItem("None", "")
+        for profile in get_all_profiles():
+            display = f"{profile.username} ({profile.surname})"
+            self._default_user_combo.addItem(display, profile.username)
+        startup_layout.addWidget(self._default_user_combo, 0, 1)
 
-        layout.addWidget(sys_group)
+        self._autostart_check = QCheckBox(
+            "Start recording with Windows startup"
+        )
+        self._autostart_check.setToolTip(
+            "Auto-login the default user and start recording at boot.\n"
+            "The app stays in the system tray (no window shown)."
+        )
+        startup_layout.addWidget(self._autostart_check, 1, 0, 1, 2)
+
+        self._minimize_check = QCheckBox("Minimize on close")
+        self._minimize_check.setToolTip(
+            "Close button minimizes to system tray instead of exiting.\n"
+            "Use right-click → Quit on the tray icon to exit."
+        )
+        startup_layout.addWidget(self._minimize_check, 2, 0, 1, 2)
+
+        layout.addWidget(startup_group)
 
         # ── Buttons ─────────────────────────────────────────
         btn_row = QHBoxLayout()
@@ -144,8 +176,9 @@ class GlobalSettingsDialog(QDialog):
 
     def _load_current_values(self):
         """Load current global settings."""
-        # Theme
         saved = load_globals()
+
+        # Theme
         theme = saved.get("appearance.theme", "dark")
         idx = self._theme_combo.findData(theme)
         if idx >= 0:
@@ -154,7 +187,16 @@ class GlobalSettingsDialog(QDialog):
         # Data dir
         if config.CUSTOM_USER_DATA_DIR:
             self._data_dir_edit.setText(config.CUSTOM_USER_DATA_DIR)
+
+        # Default user
+        default_user = saved.get("startup.default_user", "")
+        idx = self._default_user_combo.findData(default_user)
+        if idx >= 0:
+            self._default_user_combo.setCurrentIndex(idx)
+
+        # Autostart + minimize on close
         self._autostart_check.setChecked(_is_autostart_enabled())
+        self._minimize_check.setChecked(config.MINIMIZE_ON_CLOSE)
 
     def _browse_data_dir(self):
         """Open folder picker for custom data location."""
@@ -172,7 +214,9 @@ class GlobalSettingsDialog(QDialog):
         settings = {
             "appearance.theme": theme,
             "storage.data_dir": self._data_dir_edit.text(),
+            "startup.default_user": self._default_user_combo.currentData() or "",
             "system.start_with_windows": str(self._autostart_check.isChecked()),
+            "system.minimize_on_close": str(self._minimize_check.isChecked()),
         }
 
         # Persist to profiles.db
@@ -183,7 +227,9 @@ class GlobalSettingsDialog(QDialog):
 
         # Apply to config
         config.CUSTOM_USER_DATA_DIR = settings["storage.data_dir"]
+        config.DEFAULT_USER = settings["startup.default_user"]
         config.START_WITH_WINDOWS = self._autostart_check.isChecked()
+        config.MINIMIZE_ON_CLOSE = self._minimize_check.isChecked()
 
         # Handle autostart registry
         _set_autostart(self._autostart_check.isChecked())
