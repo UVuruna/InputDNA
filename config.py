@@ -32,14 +32,22 @@ LOG_DIR = DATA_DIR / "logs"
 _active_user_folder: Path | None = None
 
 
+def get_user_data_dir() -> Path:
+    """Base directory for per-user data. Custom path if set, otherwise DB_DIR."""
+    if CUSTOM_USER_DATA_DIR:
+        return Path(CUSTOM_USER_DATA_DIR)
+    return DB_DIR
+
+
 def get_user_folder(username: str, surname: str, date_of_birth: str) -> Path:
     """
     Per-user data folder: data/db/Uros_Vuruna_1990-06-20/
 
     Folder name encodes identity: Username_Surname_YYYY-MM-DD.
+    Uses CUSTOM_USER_DATA_DIR if set, otherwise DB_DIR.
     """
     folder_name = f"{username}_{surname}_{date_of_birth}"
-    return DB_DIR / folder_name
+    return get_user_data_dir() / folder_name
 
 
 def set_active_user(username: str, surname: str, date_of_birth: str) -> None:
@@ -173,6 +181,12 @@ USER_DPI = 800
 # Auto-start recording on Windows login.
 START_WITH_WINDOWS = False
 
+# Custom base directory for per-user recording data.
+# When set (non-empty), user folders are created here instead of DB_DIR.
+# profiles.db always stays in DB_DIR (needed for login before this is applied).
+# Set via Settings → Storage → Data location.
+CUSTOM_USER_DATA_DIR = ""
+
 # ─────────────────────────────────────────────────────────────
 # PER-USER SETTINGS OVERRIDE
 # ─────────────────────────────────────────────────────────────
@@ -187,6 +201,7 @@ _SETTING_MAP: dict[str, tuple[str, type]] = {
     "recording.click_sequence_gap_ms":  ("CLICK_SEQUENCE_GAP_MS", int),
     "system.dpi":                       ("USER_DPI", int),
     "system.start_with_windows":        ("START_WITH_WINDOWS", lambda v: v.lower() == "true"),
+    "storage.data_dir":                 ("CUSTOM_USER_DATA_DIR", str),
 }
 
 # Snapshot of default values — populated at module load, used by reset_to_defaults().

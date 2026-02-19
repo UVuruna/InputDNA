@@ -258,13 +258,14 @@ class MainWindow(QMainWindow):
         self._user = profile
         logger.info(f"User logged in: {profile.username} (id={profile.id})")
 
-        # Set active user folder in config
-        config.set_active_user(profile.username, profile.surname, profile.date_of_birth)
-
-        # Apply per-user settings
+        # Apply per-user settings FIRST (storage.data_dir must be set
+        # before set_active_user computes the folder path)
         user_settings = load_settings(profile.id)
         if user_settings:
             config.apply_user_settings(user_settings)
+
+        # Set active user folder in config (uses CUSTOM_USER_DATA_DIR if set)
+        config.set_active_user(profile.username, profile.surname, profile.date_of_birth)
 
         # Create screens that need user context
         self._create_user_screens(profile)
