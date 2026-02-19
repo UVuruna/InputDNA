@@ -30,7 +30,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
-from PySide6.QtCore import QTimer, Signal, QByteArray
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtGui import QIcon
 
 import config
@@ -215,6 +215,7 @@ class MainWindow(QMainWindow):
         self._tray_thread: threading.Thread | None = None
         self._system_monitor: SystemMonitor | None = None
         self._force_quit = False  # True when Quit from tray — bypass minimize
+        self._system_shutting_down = False  # True on WM_QUERYENDSESSION
 
         # Connect cross-thread signals (tray icon runs in pystray thread)
         self._sig_show_gui.connect(self._show_window)
@@ -341,7 +342,7 @@ class MainWindow(QMainWindow):
     def _on_logout(self):
         """Stop recording if active, reset tray to default, go back to login."""
         if self._recorder:
-            self._stop_recording()
+            self._stop_recording_sync()
 
         self._polling_check_timer.stop()
 
@@ -403,21 +404,49 @@ class MainWindow(QMainWindow):
         logger.info("Recording started from dashboard")
 
     def _stop_recording(self):
-        """Stop recorder, update tray to stopped state."""
+        """Stop recording asynchronously — UI stays responsive."""
         if not self._recorder:
             return
 
         self._stats_timer.stop()
-        self._stop_system_monitor()
+
+        # Capture references for background thread
+        recorder = self._recorder
+        monitor = self._system_monitor
+        self._recorder = None
+        self._system_monitor = None
+
+        def _do_stop():
+            if monitor:
+                monitor.stop()
+            recorder.stop()
+            # Signal back to Qt thread
+            QTimer.singleShot(0, self._on_recording_stopped)
+
+        threading.Thread(target=_do_stop, name="stop-worker", daemon=True).start()
+
+    def _on_recording_stopped(self):
+        """Called on Qt thread after async stop completes."""
+        if self._tray:
+            self._tray.set_stopped()
+        if self._dashboard:
+            self._dashboard.on_recording_stopped()
+        self._login_screen.update_recording_status(False, False)
+        logger.info("Recording stopped")
+
+    def _stop_recording_sync(self):
+        """Stop recording synchronously — for close/quit/logout paths."""
+        if not self._recorder:
+            return
+
+        self._stats_timer.stop()
+        if self._system_monitor:
+            self._system_monitor.stop()
+            self._system_monitor = None
 
         self._recorder.stop()
         self._recorder = None
-
-        # Update tray icon to stopped state (tray stays visible)
-        if self._tray:
-            self._tray.set_stopped()
-
-        logger.info("Recording stopped from dashboard")
+        logger.info("Recording stopped (sync)")
 
     def _update_stats(self):
         """Update dashboard stats, system info, and tray/login idle state (runs on timer)."""
@@ -500,9 +529,9 @@ class MainWindow(QMainWindow):
         self.close()
 
     def _stop_recording_from_tray(self):
-        """Stop recording and update dashboard (runs on Qt thread)."""
+        """Stop recording from tray — triggers dashboard UI update + async stop."""
         if self._recorder and self._dashboard:
-            self._dashboard.stop_recording_signal.emit()
+            self._dashboard._stop_recording()
 
     def _get_stats_text(self) -> str:
         """Tray icon stats — basic summary only."""
@@ -559,14 +588,20 @@ class MainWindow(QMainWindow):
 
     # ── Window close ───────────────────────────────────────────
 
+    def nativeEvent(self, eventType, message):
+        """Detect Windows shutdown/logoff via WM_QUERYENDSESSION."""
+        if eventType == b"windows_generic_MSG":
+            msg = ctypes.wintypes.MSG.from_address(int(message))
+            if msg.message == 0x0011:  # WM_QUERYENDSESSION
+                self._system_shutting_down = True
+                logger.info("System shutdown detected (WM_QUERYENDSESSION)")
+        return super().nativeEvent(eventType, message)
+
     def closeEvent(self, event):
         """Close behavior: minimize-on-close hides to tray, otherwise exits."""
-        # Tray Quit → force close, always exit
-        if self._force_quit:
-            if self._recorder:
-                self._stop_recording()
-            self._stop_tray()
-            event.accept()
+        # Tray Quit or system shutdown → always exit
+        if self._force_quit or self._system_shutting_down:
+            self._cleanup_and_quit(event)
             return
 
         # Minimize on close → hide window to tray
@@ -586,10 +621,17 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
 
+        self._cleanup_and_quit(event)
+
+    def _cleanup_and_quit(self, event):
+        """Synchronous cleanup: stop recording, remove tray, exit app."""
         if self._recorder:
-            self._stop_recording()
+            self._stop_recording_sync()
         self._stop_tray()
         event.accept()
+        # Explicit quit — needed when window was already hidden
+        # (minimize-on-close), otherwise QApplication.exec() won't return
+        QApplication.instance().quit()
 
 
 def _apply_global_settings():

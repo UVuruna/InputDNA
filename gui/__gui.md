@@ -192,6 +192,12 @@ Action buttons + status area. Shows current user info, recording
 status, model status, and system info panel. Home button (top-left)
 navigates to the login screen without stopping recording.
 
+**Stop Recording flow:** Clicking Stop (or tray → Stop Recording)
+shows "Stopping..." on the button (disabled) while `main.py` runs
+the actual stop in a background thread. When complete, `main.py`
+calls `on_recording_stopped()` which restores the button to
+"Start Recording" and re-enables Train/Validate.
+
 **Recording Statistics** panel has two side-by-side group boxes:
 
 | Mouse | Keyboard |

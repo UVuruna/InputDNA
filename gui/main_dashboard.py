@@ -449,13 +449,24 @@ class MainDashboard(QWidget):
         self.start_recording_signal.emit()
 
     def _stop_recording(self):
+        """Show 'Stopping...' state and signal main to stop asynchronously."""
         self._recording = False
+        self._record_btn.setText("Stopping...")
+        self._record_btn.setEnabled(False)
+        self._record_btn.clearFocus()
+
+        self._status_label.setText("Stopping")
+
+        self.stop_recording_signal.emit()
+
+    def on_recording_stopped(self):
+        """Called by main.py after async stop completes — finalize UI."""
         self._record_btn.setText("Start Recording")
+        self._record_btn.setEnabled(True)
         self._record_btn.setObjectName("success")
         self._record_btn.setStyleSheet("")
         self._record_btn.style().unpolish(self._record_btn)
         self._record_btn.style().polish(self._record_btn)
-        self._record_btn.clearFocus()
 
         self._status_label.setText("Idle")
         self._status_label.setObjectName("status-text")
@@ -469,8 +480,6 @@ class MainDashboard(QWidget):
 
         self._train_btn.setEnabled(True)
         self._validate_btn.setEnabled(True)
-
-        self.stop_recording_signal.emit()
 
     def _on_train(self):
         reply = QMessageBox.question(
