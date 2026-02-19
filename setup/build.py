@@ -80,6 +80,7 @@ def build_pyinstaller():
     hidden_imports = [
         "pystray",
         "pystray._win32",
+        "PySide6.QtSvg",
     ]
 
     cmd = [
@@ -94,7 +95,10 @@ def build_pyinstaller():
         "--uac-admin",
         # Add data files
         "--add-data", f"{ICON_PATH};.",
-        "--add-data", f"{PROJECT_DIR / 'ui' / '*.png'};ui",
+        "--add-data", f"{PROJECT_DIR / 'ui' / 'light'};ui/light",
+        "--add-data", f"{PROJECT_DIR / 'ui' / 'dark'};ui/dark",
+        "--add-data", f"{PROJECT_DIR / 'support' / 'logo' / 'light' / 'UV-InputDNA.svg'};logo/light",
+        "--add-data", f"{PROJECT_DIR / 'support' / 'logo' / 'dark' / 'UV-InputDNA.svg'};logo/dark",
     ]
 
     # Add hidden imports

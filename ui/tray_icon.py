@@ -31,7 +31,7 @@ _THEME_REG_PATH = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize
 _THEME_REG_VALUE = "SystemUsesLightTheme"
 
 
-def _detect_windows_theme() -> str:
+def detect_windows_theme() -> str:
     """Detect Windows taskbar theme from registry.
 
     Returns 'light' or 'dark'. Defaults to 'dark' if detection fails.
@@ -48,7 +48,7 @@ def _detect_windows_theme() -> str:
 
 def _load_themed_icons() -> dict[str, Image.Image]:
     """Load all tray icons from the theme-appropriate subfolder."""
-    theme = _detect_windows_theme()
+    theme = detect_windows_theme()
     theme_dir = _UI_DIR / theme
     logger.info(f"Loading tray icons from ui/{theme}/")
     return {
