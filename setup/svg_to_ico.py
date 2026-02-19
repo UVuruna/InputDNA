@@ -5,7 +5,8 @@ Two ICO files are produced:
   - InputDNA.ico       (dark variant) — exe icon, shortcuts, taskbar
   - InputDNA-setup.ico (light variant) — installer wizard
 
-Renders each ICO size individually from SVG for crisp results.
+Renders with anti-aliased QPainter + supersampled downscale (Lanczos)
+for crisp results at every size.
 
 Called automatically by build.py. Can also be run standalone:
     python setup/svg_to_ico.py
@@ -37,16 +38,37 @@ ICO_VARIANTS = {
 
 
 def _render_svg_to_pil(renderer: QSvgRenderer, size: int) -> Image.Image:
-    """Render SVG at the given size and return a Pillow RGBA Image."""
-    qimage = QImage(QSize(size, size), QImage.Format.Format_ARGB32)
+    """Render SVG at the given size and return a Pillow RGBA Image.
+
+    Uses supersampling for small sizes: renders at a higher resolution
+    then downscales with Lanczos for maximum sharpness.
+    """
+    # Supersample factor — higher for small icons where detail matters most
+    if size <= 64:
+        factor = 4
+    elif size <= 128:
+        factor = 2
+    else:
+        factor = 1
+
+    render_size = size * factor
+
+    qimage = QImage(QSize(render_size, render_size), QImage.Format.Format_ARGB32)
     qimage.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(qimage)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
     renderer.render(painter)
     painter.end()
 
     buf = qimage.bits().tobytes()
-    return Image.frombytes("RGBA", (size, size), buf, "raw", "BGRA")
+    img = Image.frombytes("RGBA", (render_size, render_size), buf, "raw", "BGRA")
+
+    if factor > 1:
+        img = img.resize((size, size), Image.Resampling.LANCZOS)
+
+    return img
 
 
 def _render_ico(svg_path: Path, ico_path: Path) -> Path:
