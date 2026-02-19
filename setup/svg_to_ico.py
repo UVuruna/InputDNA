@@ -62,16 +62,14 @@ def generate_ico() -> Path:
     if not renderer.isValid():
         raise RuntimeError(f"Failed to load SVG: {SVG_PATH}")
 
-    images = []
-    for size in ICO_SIZES:
-        images.append(_render_svg_to_pil(renderer, size))
-
-    # Save as ICO (first image is the "main" one, rest are alternates)
-    images[0].save(
+    # Render at the largest size and let Pillow downscale for each ICO frame.
+    # Pillow's ICO save ignores append_images — it only uses `sizes` to
+    # auto-resize from the base image.
+    largest = _render_svg_to_pil(renderer, max(ICO_SIZES))
+    largest.save(
         str(ICO_PATH),
         format="ICO",
         sizes=[(s, s) for s in ICO_SIZES],
-        append_images=images[1:],
     )
 
     return ICO_PATH
