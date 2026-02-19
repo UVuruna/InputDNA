@@ -138,12 +138,24 @@ QLabel#status {
     border-radius: 6px;
 }
 
+QWidget#status-bar {
+    background-color: $bg_alt;
+    border-radius: 6px;
+}
+
+QLabel#status-text {
+    font-size: 13px;
+    color: $text_muted;
+}
+
 QLabel#status-recording {
     font-size: 13px;
     color: $success;
-    padding: 8px;
-    background-color: $bg_alt;
-    border-radius: 6px;
+}
+
+QLabel#status-detail {
+    font-size: 13px;
+    color: $text_dim;
 }
 
 /* ── Stat/info labels (Pink accent) ──────────────────────── */

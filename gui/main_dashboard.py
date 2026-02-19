@@ -9,6 +9,8 @@ Three primary actions:
 Shows current user info, recording stats, and model status.
 """
 
+from datetime import datetime
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QGridLayout, QMessageBox, QProgressBar, QFileDialog,
@@ -83,10 +85,32 @@ class MainDashboard(QWidget):
 
         layout.addLayout(header)
 
-        # ── Status ─────────────────────────────────────────
-        self._status_label = QLabel("Status: Idle")
-        self._status_label.setObjectName("status")
-        layout.addWidget(self._status_label)
+        # ── Status bar ────────────────────────────────────────
+        status_bar = QWidget()
+        status_bar.setObjectName("status-bar")
+        status_layout = QHBoxLayout(status_bar)
+        status_layout.setContentsMargins(12, 8, 12, 8)
+        status_layout.setSpacing(0)
+
+        self._status_label = QLabel("Idle")
+        self._status_label.setObjectName("status-text")
+        status_layout.addWidget(self._status_label)
+
+        status_layout.addStretch()
+
+        self._started_label = QLabel("")
+        self._started_label.setObjectName("status-detail")
+        status_layout.addWidget(self._started_label)
+
+        self._uptime_label = QLabel("")
+        self._uptime_label.setObjectName("status-detail")
+        self._uptime_label.setContentsMargins(20, 0, 0, 0)
+        status_layout.addWidget(self._uptime_label)
+
+        layout.addWidget(status_bar)
+
+        # Recording start time (for uptime calculation)
+        self._recording_started: datetime | None = None
 
         # ── Actions ────────────────────────────────────────
         actions_group = QGroupBox("Actions")
@@ -393,11 +417,18 @@ class MainDashboard(QWidget):
         self._record_btn.style().unpolish(self._record_btn)
         self._record_btn.style().polish(self._record_btn)
         self._record_btn.clearFocus()
-        self._status_label.setText("Status: Recording...")
+
+        self._status_label.setText("Recording")
         self._status_label.setObjectName("status-recording")
         self._status_label.setStyleSheet("")
         self._status_label.style().unpolish(self._status_label)
         self._status_label.style().polish(self._status_label)
+
+        self._recording_started = datetime.now()
+        self._started_label.setText(
+            f"Started: {self._recording_started.strftime('%H:%M:%S')}"
+        )
+        self._uptime_label.setText("Uptime: 0:00")
 
         # Disable train/validate during recording
         self._train_btn.setEnabled(False)
@@ -413,11 +444,16 @@ class MainDashboard(QWidget):
         self._record_btn.style().unpolish(self._record_btn)
         self._record_btn.style().polish(self._record_btn)
         self._record_btn.clearFocus()
-        self._status_label.setText("Status: Idle")
-        self._status_label.setObjectName("status")
+
+        self._status_label.setText("Idle")
+        self._status_label.setObjectName("status-text")
         self._status_label.setStyleSheet("")
         self._status_label.style().unpolish(self._status_label)
         self._status_label.style().polish(self._status_label)
+
+        self._recording_started = None
+        self._started_label.setText("")
+        self._uptime_label.setText("")
 
         self._train_btn.setEnabled(True)
         self._validate_btn.setEnabled(True)
@@ -443,6 +479,14 @@ class MainDashboard(QWidget):
 
     def _update_stats_display(self):
         """Refresh all stat labels from cached totals/windowed data."""
+        # Update uptime if recording
+        if self._recording_started:
+            delta = datetime.now() - self._recording_started
+            total_minutes = int(delta.total_seconds()) // 60
+            hours = total_minutes // 60
+            minutes = total_minutes % 60
+            self._uptime_label.setText(f"Uptime: {hours}:{minutes:02d}")
+
         data = self._totals if self._stats_mode == "total" else self._windowed
 
         # Mouse stats
