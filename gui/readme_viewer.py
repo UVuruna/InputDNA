@@ -2,7 +2,8 @@
 Markdown documentation viewer — browser-based.
 
 Renders all project .md files to themed HTML (with Mermaid CDN support)
-in a temp directory, then opens the requested file in the default browser.
+in a temp directory, then serves them via a local HTTP server and opens
+the requested file in the default browser.
 
 No QWebEngine dependency — uses the system browser for full HTML5/CSS3
 and Mermaid diagram rendering.
@@ -15,6 +16,10 @@ import sys
 import shutil
 import logging
 import tempfile
+import threading
+import webbrowser
+from functools import partial
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from string import Template
 
@@ -34,6 +39,9 @@ _rendered_theme: str | None = None
 
 # Project root used for resolving image paths
 _project_root: Path | None = None
+
+# Local HTTP server (started once, serves docs temp dir)
+_server_port: int | None = None
 
 
 # ── HTML template ─────────────────────────────────────────────
@@ -228,6 +236,33 @@ $content
 </html>""")
 
 
+# ── Local HTTP server ─────────────────────────────────────────
+
+
+class _SilentHandler(SimpleHTTPRequestHandler):
+    """HTTP handler that serves from docs dir without logging to console."""
+
+    def log_message(self, format, *args):
+        pass  # Suppress request logging
+
+
+def _ensure_server() -> int:
+    """Start a local HTTP server (once) serving the docs temp dir. Returns port."""
+    global _server_port
+    if _server_port is not None:
+        return _server_port
+
+    _DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    handler = partial(_SilentHandler, directory=str(_DOCS_DIR))
+    server = HTTPServer(("127.0.0.1", 0), handler)
+    _server_port = server.server_address[1]
+
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info(f"Docs server started on http://127.0.0.1:{_server_port}")
+    return _server_port
+
+
 # ── Public API ────────────────────────────────────────────────
 
 
@@ -235,7 +270,8 @@ def open_docs(project_root: Path, file_name: str = "README.md"):
     """Render project docs to HTML and open in the default browser.
 
     On first call, renders all .md files from project_root to the docs
-    temp directory. Subsequent calls reuse the cache unless the theme changed.
+    temp directory and starts a local HTTP server. Subsequent calls reuse
+    the cache unless the theme changed.
     """
     global _rendered_theme, _project_root
 
@@ -256,24 +292,13 @@ def open_docs(project_root: Path, file_name: str = "README.md"):
             logger.error(f"Failed to render docs: {e}")
             return
 
-    # Open the requested file
-    html_name = Path(file_name).with_suffix(".html")
-    html_path = _DOCS_DIR / html_name
+    # Ensure HTTP server is running
+    port = _ensure_server()
 
-    if not html_path.exists():
-        # Fallback: try rendering just this file
-        md_path = _project_root / file_name
-        if md_path.exists():
-            try:
-                _render_single(md_path, _project_root, _DOCS_DIR, palette)
-            except Exception as e:
-                logger.error(f"Failed to render {file_name}: {e}")
-                return
-
-    if html_path.exists():
-        os.startfile(str(html_path))
-    else:
-        logger.warning(f"Documentation file not found: {file_name}")
+    # Open the requested file via HTTP (no file:// restrictions)
+    html_name = Path(file_name).with_suffix(".html").as_posix()
+    url = f"http://127.0.0.1:{port}/{html_name}"
+    webbrowser.open(url)
 
 
 # ── Rendering engine ──────────────────────────────────────────
