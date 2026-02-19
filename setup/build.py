@@ -2,9 +2,10 @@
 Build InputDNA into a distributable package.
 
 Steps:
-  1. Run PyInstaller (--onedir mode) to create the exe
-  2. Sign the exe with self-signed certificate
-  3. Call NSIS to create the installer
+  1. Generate ICO from SVG logo (svg_to_ico)
+  2. Run PyInstaller (--onedir mode) to create the exe
+  3. Sign the exe with self-signed certificate
+  4. Call NSIS to create the installer
 
 Prerequisites:
   - pip install pyinstaller
@@ -54,8 +55,13 @@ def run(cmd: list[str], **kwargs):
     return result
 
 
+def generate_ico():
+    step("1/4  Generating ICO from SVG")
+    run([sys.executable, str(SETUP_DIR / "svg_to_ico.py")])
+
+
 def build_pyinstaller():
-    step("1/3  Building exe with PyInstaller")
+    step("2/4  Building exe with PyInstaller")
 
     # Clean previous build
     for d in [DIST_DIR, BUILD_DIR]:
@@ -127,7 +133,7 @@ def build_pyinstaller():
 
 
 def sign_exe(exe_path: Path):
-    step("2/3  Signing exe with certificate")
+    step("3/4  Signing exe with certificate")
 
     if not CERT_PATH.exists():
         print(f"  WARNING: Certificate not found: {CERT_PATH}")
@@ -171,7 +177,7 @@ def sign_exe(exe_path: Path):
 
 
 def build_installer():
-    step("3/3  Building installer with NSIS")
+    step("4/4  Building installer with NSIS")
 
     makensis = shutil.which("makensis")
     if not makensis:
@@ -213,14 +219,11 @@ def main():
     print(f"Building {APP_NAME}")
     print(f"Project: {PROJECT_DIR}")
 
-    if not ICON_PATH.exists():
-        print(f"ERROR: Icon not found: {ICON_PATH}")
-        sys.exit(1)
-
     if not ENTRY_POINT.exists():
         print(f"ERROR: Entry point not found: {ENTRY_POINT}")
         sys.exit(1)
 
+    generate_ico()
     exe_path = build_pyinstaller()
     sign_exe(exe_path)
     build_installer()

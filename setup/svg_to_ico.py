@@ -5,13 +5,12 @@ Renders the SVG at multiple sizes and saves as a multi-resolution ICO file.
 Uses the light-theme variant (dark outlines) for best visibility in most
 OS contexts (Explorer, shortcuts, installer, Add/Remove Programs).
 
-Usage:
+Called automatically by build.py. Can also be run standalone:
     python setup/svg_to_ico.py
 
 Requires: PySide6, Pillow (both already project dependencies).
 """
 
-import io
 import sys
 from pathlib import Path
 
@@ -31,7 +30,7 @@ ICO_PATH = SETUP_DIR / "InputDNA.ico"
 ICO_SIZES = [16, 32, 48, 64, 128, 256]
 
 
-def render_svg_to_pil(renderer: QSvgRenderer, size: int) -> Image.Image:
+def _render_svg_to_pil(renderer: QSvgRenderer, size: int) -> Image.Image:
     """Render SVG at the given size and return a Pillow RGBA Image."""
     qimage = QImage(QSize(size, size), QImage.Format.Format_ARGB32)
     qimage.fill(Qt.GlobalColor.transparent)
@@ -42,31 +41,30 @@ def render_svg_to_pil(renderer: QSvgRenderer, size: int) -> Image.Image:
 
     # QImage (ARGB32) → bytes → Pillow
     buf = qimage.bits().tobytes()
-    pil_img = Image.frombytes("RGBA", (size, size), buf, "raw", "BGRA")
-    return pil_img
+    return Image.frombytes("RGBA", (size, size), buf, "raw", "BGRA")
 
 
-def main():
+def generate_ico() -> Path:
+    """Generate InputDNA.ico from UV-InputDNA.svg. Returns the ICO path.
+
+    Creates a QGuiApplication if one doesn't exist (needed by QSvgRenderer).
+    Safe to call from build.py which doesn't have a Qt app yet.
+    """
     if not SVG_PATH.exists():
-        print(f"ERROR: SVG not found: {SVG_PATH}")
-        sys.exit(1)
+        raise FileNotFoundError(f"SVG not found: {SVG_PATH}")
 
-    # QSvgRenderer needs a QGuiApplication
-    app = QGuiApplication(sys.argv)
+    # QSvgRenderer needs a QGuiApplication — create one if none exists
+    app = QGuiApplication.instance()
+    if app is None:
+        app = QGuiApplication(sys.argv)
 
     renderer = QSvgRenderer(str(SVG_PATH))
     if not renderer.isValid():
-        print(f"ERROR: Failed to load SVG: {SVG_PATH}")
-        sys.exit(1)
-
-    print(f"Source: {SVG_PATH}")
-    print(f"SVG size: {renderer.defaultSize().width()}x{renderer.defaultSize().height()}")
+        raise RuntimeError(f"Failed to load SVG: {SVG_PATH}")
 
     images = []
     for size in ICO_SIZES:
-        img = render_svg_to_pil(renderer, size)
-        images.append(img)
-        print(f"  Rendered {size}x{size}")
+        images.append(_render_svg_to_pil(renderer, size))
 
     # Save as ICO (first image is the "main" one, rest are alternates)
     images[0].save(
@@ -76,8 +74,16 @@ def main():
         append_images=images[1:],
     )
 
-    size_kb = ICO_PATH.stat().st_size / 1024
-    print(f"\nOutput: {ICO_PATH} ({size_kb:.0f} KB)")
+    return ICO_PATH
+
+
+def main():
+    print(f"Source: {SVG_PATH}")
+
+    ico_path = generate_ico()
+
+    size_kb = ico_path.stat().st_size / 1024
+    print(f"Output: {ico_path} ({size_kb:.0f} KB)")
     print(f"Sizes: {', '.join(f'{s}x{s}' for s in ICO_SIZES)}")
 
 

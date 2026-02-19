@@ -6,8 +6,7 @@ Build and installation scripts for packaging InputDNA as a distributable Windows
 
 ```
 1. python setup/create_cert.py    — One-time: generate signing certificate
-2. python setup/svg_to_ico.py     — After logo changes: regenerate ICO from SVG
-3. python setup/build.py          — Each release: build exe + installer
+2. python setup/build.py          — Each release: build exe + installer
 ```
 
 ### Prerequisites
@@ -23,9 +22,10 @@ Build and installation scripts for packaging InputDNA as a distributable Windows
 ### `build.py` — Main Build Script
 
 Orchestrates the full build pipeline:
-1. Runs PyInstaller in `--onedir` mode (no console, UAC admin)
-2. Signs the exe with the self-signed certificate (if available)
-3. Calls NSIS `makensis` to create `InputDNA_Setup.exe`
+1. Generates ICO from SVG logo (`svg_to_ico.py`)
+2. Runs PyInstaller in `--onedir` mode (no console, UAC admin)
+3. Signs the exe with the self-signed certificate (if available)
+4. Calls NSIS `makensis` to create `InputDNA_Setup.exe`
 
 Output goes to `dist/` folder (gitignored).
 
@@ -57,12 +57,10 @@ Uninstaller removes program files but preserves user data.
 ### `svg_to_ico.py` — ICO Generator
 
 Renders `support/logo/light/UV-InputDNA.svg` into a multi-resolution ICO file
-at `setup/InputDNA.ico`. Uses PySide6 `QSvgRenderer` + Pillow. Run once after
-logo changes:
+at `setup/InputDNA.ico`. Uses PySide6 `QSvgRenderer` + Pillow.
 
-```
-python setup/svg_to_ico.py
-```
+Called automatically by `build.py` as the first step. Can also be run
+standalone: `python setup/svg_to_ico.py`
 
 Uses the light-theme variant (dark outlines) for the static ICO — best
 visibility across most OS contexts (Explorer, shortcuts, Add/Remove Programs).
