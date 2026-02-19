@@ -9,7 +9,6 @@ No QWebEngine dependency — uses the system browser for full HTML5/CSS3
 and Mermaid diagram rendering.
 """
 
-import base64
 import os
 import re
 import sys
@@ -351,9 +350,11 @@ def _render_single(
     content = _rewrite_md_links(content)
     html_body = md_converter.convert(content)
 
-    html_body = _embed_images(html_body, project_root)
     full_html = _HTML_TEMPLATE.substitute(**palette, content=html_body)
     html_path.write_text(full_html, encoding="utf-8")
+
+    # Copy referenced images to temp dir (HTTP server serves them)
+    _copy_referenced_images(html_body, project_root, output_dir)
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -392,35 +393,23 @@ def _rewrite_md_links(content: str) -> str:
     )
 
 
-def _embed_images(html: str, project_root: Path) -> str:
-    """Embed referenced images as base64 data URIs directly in the HTML.
+def _copy_referenced_images(html: str, project_root: Path, output_dir: Path):
+    """Copy images referenced in HTML from project root to the output dir.
 
-    Chrome blocks file:// cross-origin access, so local images don't load.
-    Embedding them as data URIs bypasses all browser security restrictions.
+    Images in .md files use paths relative to the project root
+    (e.g. support/logo/dark/UV-InputDNA.svg). The rendered HTML
+    is served via local HTTP, so relative paths resolve correctly
+    as long as the files exist in the serving directory.
     """
-    _MIME = {
-        ".svg": "image/svg+xml",
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-    }
-
-    def _replace_src(m):
+    for m in re.finditer(r'src="([^"]*)"', html):
         src = m.group(1)
         if src.startswith(("http://", "https://", "data:", "file://")):
-            return m.group(0)
+            continue
         src_path = (project_root / src).resolve()
-        if not src_path.exists():
-            return m.group(0)
-        mime = _MIME.get(src_path.suffix.lower())
-        if not mime:
-            return m.group(0)
-        data = base64.b64encode(src_path.read_bytes()).decode("ascii")
-        return f'src="data:{mime};base64,{data}"'
-
-    return re.sub(r'src="([^"]*)"', _replace_src, html)
+        if src_path.exists():
+            dest_path = output_dir / src
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_path, dest_path)
 
 
 def _current_palette() -> dict:
