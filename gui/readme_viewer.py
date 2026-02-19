@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, QTimer, QUrl
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWebEngineCore import QWebEnginePage
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 
 from gui.styles import DARK_PALETTE, LIGHT_PALETTE
 from gui.global_settings import load_globals
@@ -319,6 +319,10 @@ class ReadmeViewer(QWidget):
         # ── Web engine view ───────────────────────────────────
         self._web_view = QWebEngineView()
         self._web_page = _MarkdownPage(self._on_link_click, self._web_view)
+        self._web_page.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls,
+            True,
+        )
         self._web_view.setPage(self._web_page)
         layout.addWidget(self._web_view, 1)
 
