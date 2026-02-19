@@ -27,7 +27,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 
 import config
-from database.schema import init_db
+from database.schema import init_mouse_db, init_keyboard_db, init_session_db
 from database.rotation import check_and_rotate
 from database.writer import DatabaseWriter
 from listeners.mouse_listener import MouseListener
@@ -60,9 +60,14 @@ logger = logging.getLogger("main")
 class Recorder:
     """Background recording engine (no GUI, just threads)."""
 
-    def __init__(self, user_id: int):
-        self._user_id = user_id
-        self._db_path = config.get_user_db_path(user_id)
+    def __init__(self, profile: UserProfile):
+        self._profile = profile
+        self._user_folder = config.get_user_folder(
+            profile.username, profile.surname, profile.date_of_birth,
+        )
+        self._mouse_db = self._user_folder / "mouse.db"
+        self._keyboard_db = self._user_folder / "keyboard.db"
+        self._session_db = self._user_folder / "session.db"
         self._event_queue: queue.Queue = queue.Queue()
         self._db_writer: DatabaseWriter | None = None
         self._mouse_listener: MouseListener | None = None
@@ -79,25 +84,34 @@ class Recorder:
         logger.info("Recording starting...")
         logger.info("=" * 50)
 
-        # Init database
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        config.set_active_db_path(self._db_path)
-        check_and_rotate(self._db_path)
-        logger.info(f"Database: {self._db_path}")
-        conn = init_db(self._db_path)
+        # Ensure user folder exists
+        self._user_folder.mkdir(parents=True, exist_ok=True)
 
-        # Create recording session
+        # Check rotation for all DBs
+        check_and_rotate(self._mouse_db)
+        check_and_rotate(self._keyboard_db)
+        check_and_rotate(self._session_db)
+
+        # Init all three databases
+        logger.info(f"User folder: {self._user_folder}")
+        init_mouse_db(self._mouse_db).close()
+        init_keyboard_db(self._keyboard_db).close()
+        session_conn = init_session_db(self._session_db)
+
+        # Create recording session (in session.db)
         self._recording_session = RecordingSessionRecord(
             started_at=wall_clock_iso(),
             perf_counter_start_ns=now_ns(),
         )
-        self._session_id = self._recording_session.write_start(conn)
-        conn.commit()
-        conn.close()
+        self._session_id = self._recording_session.write_start(session_conn)
+        session_conn.commit()
+        session_conn.close()
         logger.info(f"Recording session #{self._session_id} started")
 
-        # Start DB writer
-        self._db_writer = DatabaseWriter(self._db_path)
+        # Start DB writer (routes to 3 databases)
+        self._db_writer = DatabaseWriter(
+            self._mouse_db, self._keyboard_db, self._session_db,
+        )
         self._db_writer.start()
 
         # Start listeners
@@ -133,7 +147,7 @@ class Recorder:
         if self._db_writer:
             self._db_writer.stop()
 
-        # Finalize recording session
+        # Finalize recording session (in session.db)
         if self._recording_session and self._processor:
             self._recording_session.ended_at = wall_clock_iso()
             self._recording_session.total_movements = self._processor.movement_count
@@ -141,7 +155,7 @@ class Recorder:
             self._recording_session.total_keystrokes = self._processor.keystroke_count
 
             import sqlite3
-            conn = sqlite3.connect(str(self._db_path))
+            conn = sqlite3.connect(str(self._session_db))
             self._recording_session.write_end(conn)
             conn.commit()
             conn.close()
@@ -244,6 +258,9 @@ class MainWindow(QMainWindow):
         self._user = profile
         logger.info(f"User logged in: {profile.username} (id={profile.id})")
 
+        # Set active user folder in config
+        config.set_active_user(profile.username, profile.surname, profile.date_of_birth)
+
         # Apply per-user settings
         user_settings = load_settings(profile.id)
         if user_settings:
@@ -289,6 +306,7 @@ class MainWindow(QMainWindow):
             self._stop_recording()
 
         config.reset_to_defaults()
+        config.clear_active_user()
         self._user = None
         logger.info("User logged out")
 
@@ -312,7 +330,7 @@ class MainWindow(QMainWindow):
         if self._recorder or not self._user:
             return
 
-        self._recorder = Recorder(self._user.id)
+        self._recorder = Recorder(self._user)
         self._recorder.start()
 
         # Start tray icon in background thread

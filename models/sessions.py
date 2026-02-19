@@ -63,6 +63,8 @@ class MovementSession:
     processor to link clicks/scrolls to their preceding movement
     without waiting for DB auto-increment.
     """
+    _db_target = "mouse"
+
     movement_id: int            # App-generated: session * 1_000_000 + seq
     start_x: int
     start_y: int
@@ -115,6 +117,8 @@ class ClickSequence:
     Group of clicks: single (1), double (2), or spam (3+).
     All clicks are same button and within CLICK_SEQUENCE_GAP_MS of each other.
     """
+    _db_target = "mouse"
+
     button: str                     # "left", "right", "middle"
     click_count: int
     clicks: List[SingleClick]
@@ -145,6 +149,8 @@ class ClickSequence:
 @dataclass
 class DragRecord:
     """Click-hold-move-release operation."""
+    _db_target = "mouse"
+
     button: str
     start_x: int
     start_y: int
@@ -171,9 +177,11 @@ class DragRecord:
             )
 
 
-@dataclass(slots=True)
+@dataclass
 class ScrollEvent:
     """Single scroll event."""
+    _db_target = "mouse"
+
     movement_id: Optional[int]  # Preceding movement (nullable)
     direction: str              # "up", "down", "left", "right"
     delta: int                  # Scroll amount
@@ -196,9 +204,11 @@ class ScrollEvent:
 # KEYBOARD RECORDS
 # ─────────────────────────────────────────────────────────────
 
-@dataclass(slots=True)
+@dataclass
 class KeystrokeRecord:
     """One complete key press (down + up) with duration."""
+    _db_target = "keyboard"
+
     scan_code: int
     vkey: int                   # Virtual key code (layout-dependent)
     key_name: str               # For human readability only
@@ -222,9 +232,11 @@ class KeystrokeRecord:
         )
 
 
-@dataclass(slots=True)
+@dataclass
 class KeyTransitionRecord:
     """Delay between two consecutive key presses (scan code pair)."""
+    _db_target = "keyboard"
+
     from_scan: int
     to_scan: int
     from_key_name: str          # For readability
@@ -244,9 +256,11 @@ class KeyTransitionRecord:
         )
 
 
-@dataclass(slots=True)
+@dataclass
 class ShortcutRecord:
     """Keyboard shortcut with full timing profile."""
+    _db_target = "keyboard"
+
     shortcut_name: str          # "Ctrl+C", "Alt+Tab", etc.
     modifier_scans: str         # JSON array of modifier scan codes
     main_scan: int              # Main key scan code
@@ -277,9 +291,11 @@ class ShortcutRecord:
 # SYSTEM EVENTS
 # ─────────────────────────────────────────────────────────────
 
-@dataclass(slots=True)
+@dataclass
 class SystemEventRecord:
     """Tracks a system state change (mouse speed, resolution, layout, etc.)."""
+    _db_target = "session"
+
     key: str        # e.g. "mouse_speed", "screen_resolution", "mouse_acceleration"
     value: str
     t_ns: int
@@ -300,6 +316,8 @@ class SystemEventRecord:
 @dataclass
 class RecordingSessionRecord:
     """One recording period (start → stop/quit)."""
+    _db_target = "session"
+
     started_at: str
     ended_at: Optional[str] = None
     total_movements: int = 0

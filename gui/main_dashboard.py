@@ -272,7 +272,7 @@ class MainDashboard(QWidget):
 
     def _on_export(self):
         """Export user's recording database files."""
-        files = get_user_db_files(self._user.id)
+        files = get_user_db_files(self._user.username, self._user.surname, self._user.date_of_birth)
         if not files:
             QMessageBox.information(
                 self, "Export Data",
@@ -290,7 +290,9 @@ class MainDashboard(QWidget):
             return
 
         from pathlib import Path
-        success, total = export_all_user_data(self._user.id, Path(dest))
+        success, total = export_all_user_data(
+            self._user.username, self._user.surname, self._user.date_of_birth, Path(dest),
+        )
         if success == total:
             QMessageBox.information(
                 self, "Export Complete",

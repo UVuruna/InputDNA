@@ -1,13 +1,14 @@
 """
 Database inspector — shows all tables, columns, and sample rows.
 
-Reads both profiles.db and the active movements.db (per-user or fallback).
-Displays 10 random rows from each table with formatted output.
+Reads profiles.db and all three per-user databases (mouse.db, keyboard.db,
+session.db). Displays random sample rows from each table with formatted output.
 
 Usage:
-    python inspect_db.py
-    python inspect_db.py --user 1        # inspect user_1's movements.db
-    python inspect_db.py --rows 5        # show 5 rows instead of 10
+    python inspect_db.py                                    # auto-detect first user
+    python inspect_db.py --user "Uros_Vuruna_1990-06-20"   # specific user folder
+    python inspect_db.py --rows 5                           # fewer sample rows
+    python inspect_db.py --profiles                         # show only profiles.db
 """
 
 import argparse
@@ -27,7 +28,9 @@ def inspect_database(db_path: Path, rows: int) -> None:
     conn.row_factory = sqlite3.Row
 
     tables = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        "SELECT name FROM sqlite_master "
+        "WHERE type='table' AND name != 'sqlite_sequence' "
+        "ORDER BY name"
     ).fetchall()
 
     if not tables:
@@ -94,31 +97,61 @@ def inspect_database(db_path: Path, rows: int) -> None:
     conn.close()
 
 
+def find_user_folders() -> list[Path]:
+    """Find all user folders in the DB directory."""
+    if not config.DB_DIR.exists():
+        return []
+    folders = []
+    for item in sorted(config.DB_DIR.iterdir()):
+        if item.is_dir() and any(item.glob("*.db")):
+            # Skip old user_N folders
+            if not item.name.startswith("user_"):
+                folders.append(item)
+    return folders
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Inspect Input DNA databases")
-    parser.add_argument("--user", type=int, default=None, help="User ID (inspect user's movements.db)")
-    parser.add_argument("--rows", type=int, default=10, help="Number of sample rows per table (default: 10)")
+    parser.add_argument("--user", type=str, default=None,
+                        help="User folder name (e.g. Uros_Vuruna_1990-06-20)")
+    parser.add_argument("--rows", type=int, default=10,
+                        help="Number of sample rows per table (default: 10)")
+    parser.add_argument("--profiles", action="store_true",
+                        help="Show only profiles.db")
     args = parser.parse_args()
-
-    # Determine movements.db path
-    if args.user is not None:
-        movements_path = config.get_user_db_path(args.user)
-    else:
-        # Try user_1 first (most common), fallback to headless
-        user_1_path = config.get_user_db_path(1)
-        movements_path = user_1_path if user_1_path.exists() else config.DB_PATH
 
     profiles_path = config.DB_DIR / "profiles.db"
 
+    # Always show profiles.db
     print("=" * 64)
     print(f"  PROFILES DATABASE: {profiles_path}")
     print("=" * 64)
     inspect_database(profiles_path, args.rows)
 
-    print(f"\n\n{'=' * 64}")
-    print(f"  MOVEMENTS DATABASE: {movements_path}")
-    print("=" * 64)
-    inspect_database(movements_path, args.rows)
+    if args.profiles:
+        print()
+        return
+
+    # Determine user folder
+    if args.user:
+        user_folder = config.DB_DIR / args.user
+    else:
+        # Auto-detect first user folder
+        folders = find_user_folders()
+        if folders:
+            user_folder = folders[0]
+        else:
+            print("\n  No user folders found.")
+            print()
+            return
+
+    # Show all three databases
+    for db_name, label in [("mouse.db", "MOUSE"), ("keyboard.db", "KEYBOARD"), ("session.db", "SESSION")]:
+        db_path = user_folder / db_name
+        print(f"\n\n{'=' * 64}")
+        print(f"  {label} DATABASE: {db_path}")
+        print("=" * 64)
+        inspect_database(db_path, args.rows)
 
     print()
 

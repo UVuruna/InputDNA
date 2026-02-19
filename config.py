@@ -25,28 +25,53 @@ LOG_DIR = DATA_DIR / "logs"
 # ─────────────────────────────────────────────────────────────
 # DATABASE
 # ─────────────────────────────────────────────────────────────
-# Default DB path for headless mode (no logged-in user).
-# When a user is logged in, use get_user_db_path(user_id) instead.
-DB_PATH = DB_DIR / "movements.db"
+# Three databases per user: mouse.db, keyboard.db, session.db.
+# Active user folder is set at login time via set_active_user().
 
-# Active DB path set at runtime by the Recorder after login.
-_active_db_path: Path | None = None
-
-
-def get_user_db_path(user_id: int) -> Path:
-    """Per-user database path: data/db/user_{id}/movements.db"""
-    return DB_DIR / f"user_{user_id}" / "movements.db"
+# Active user folder set at runtime after login.
+_active_user_folder: Path | None = None
 
 
-def get_active_db_path() -> Path:
-    """Return the currently active DB path (per-user or fallback)."""
-    return _active_db_path or DB_PATH
+def get_user_folder(username: str, surname: str, date_of_birth: str) -> Path:
+    """
+    Per-user data folder: data/db/Uros_Vuruna_1990-06-20/
+
+    Folder name encodes identity: Username_Surname_YYYY-MM-DD.
+    """
+    folder_name = f"{username}_{surname}_{date_of_birth}"
+    return DB_DIR / folder_name
 
 
-def set_active_db_path(path: Path) -> None:
-    """Set the active DB path (called by Recorder on start)."""
-    global _active_db_path
-    _active_db_path = path
+def set_active_user(username: str, surname: str, date_of_birth: str) -> None:
+    """Set the active user folder (called on login)."""
+    global _active_user_folder
+    _active_user_folder = get_user_folder(username, surname, date_of_birth)
+
+
+def clear_active_user() -> None:
+    """Clear the active user folder (called on logout)."""
+    global _active_user_folder
+    _active_user_folder = None
+
+
+def get_active_user_folder() -> Path:
+    """Return the active user's data folder, or DB_DIR as fallback."""
+    return _active_user_folder or DB_DIR
+
+
+def get_active_mouse_db() -> Path:
+    """Path to active user's mouse database."""
+    return get_active_user_folder() / "mouse.db"
+
+
+def get_active_keyboard_db() -> Path:
+    """Path to active user's keyboard database."""
+    return get_active_user_folder() / "keyboard.db"
+
+
+def get_active_session_db() -> Path:
+    """Path to active user's session database."""
+    return get_active_user_folder() / "session.db"
 
 # Rotate to a new DB file when the active DB exceeds this size.
 # Check happens once at session start, not during recording.

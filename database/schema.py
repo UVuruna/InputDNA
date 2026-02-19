@@ -1,7 +1,12 @@
 """
-Database schema — all CREATE TABLE statements.
+Database schema — CREATE TABLE statements for all three databases.
 
-Called once on first run. Safe to call again (uses IF NOT EXISTS).
+Each user has three SQLite databases:
+- mouse.db:    Movement sessions, paths, clicks, drags, scrolls
+- keyboard.db: Keystrokes, key transitions, shortcuts
+- session.db:  Recording sessions, system events, metadata
+
+Called once on first run per database. Safe to call again (uses IF NOT EXISTS).
 Also sets SQLite pragmas for optimal performance.
 """
 
@@ -9,44 +14,34 @@ import sqlite3
 from pathlib import Path
 
 
-def init_db(db_path: Path) -> sqlite3.Connection:
-    """
-    Create database, set pragmas, create all tables.
-    Returns an open connection.
-    """
+# ── Shared pragmas ──────────────────────────────────────────
+
+_PRAGMAS = """
+    PRAGMA journal_mode=WAL;
+    PRAGMA synchronous=NORMAL;
+    PRAGMA cache_size=-64000;
+    PRAGMA temp_store=MEMORY;
+    PRAGMA mmap_size=268435456;
+"""
+
+
+def _init(db_path: Path, schema: str) -> sqlite3.Connection:
+    """Create database, set pragmas, create tables. Returns open connection."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
-
-    # ── Performance pragmas ────────────────────────────────
-    conn.executescript("""
-        PRAGMA journal_mode=WAL;
-        PRAGMA synchronous=NORMAL;
-        PRAGMA cache_size=-64000;
-        PRAGMA temp_store=MEMORY;
-        PRAGMA mmap_size=268435456;
-    """)
-
-    # ── Create tables ──────────────────────────────────────
-    conn.executescript(_SCHEMA)
-
-    # ── Encoding metadata ─────────────────────────────────
-    # Signals to post-processing that path_points and drag_points
-    # use delta encoding: seq=0 is absolute, seq>0 is delta from previous.
-    conn.execute(
-        "INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)",
-        ("path_encoding", "delta_v1"),
-    )
-
+    conn.executescript(_PRAGMAS)
+    conn.executescript(schema)
     conn.commit()
     return conn
 
 
-_SCHEMA = """
+# ══════════════════════════════════════════════════════════════
+# MOUSE DATABASE
+# ══════════════════════════════════════════════════════════════
 
--- ══════════════════════════════════════════════════════════
--- MOUSE: Movement Sessions
--- ══════════════════════════════════════════════════════════
+_MOUSE_SCHEMA = """
 
+-- Movement Sessions
 CREATE TABLE IF NOT EXISTS movements (
     id                   INTEGER PRIMARY KEY,
     start_x              INTEGER NOT NULL,
@@ -60,10 +55,11 @@ CREATE TABLE IF NOT EXISTS movements (
     point_count          INTEGER NOT NULL,
     hour_of_day          INTEGER NOT NULL,
     day_of_week          INTEGER NOT NULL,
-    recording_session_id INTEGER REFERENCES recording_sessions(id),
+    recording_session_id INTEGER,
     timestamp            TEXT    NOT NULL
 );
 
+-- Raw path coordinates within movements (delta-encoded)
 CREATE TABLE IF NOT EXISTS path_points (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     movement_id  INTEGER NOT NULL REFERENCES movements(id),
@@ -73,10 +69,7 @@ CREATE TABLE IF NOT EXISTS path_points (
     t_ns         INTEGER NOT NULL
 );
 
--- ══════════════════════════════════════════════════════════
--- MOUSE: Click Sequences (single / double / spam)
--- ══════════════════════════════════════════════════════════
-
+-- Click sequences (single / double / spam)
 CREATE TABLE IF NOT EXISTS click_sequences (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     movement_id       INTEGER REFERENCES movements(id),
@@ -88,6 +81,7 @@ CREATE TABLE IF NOT EXISTS click_sequences (
     timestamp         TEXT    NOT NULL
 );
 
+-- Individual clicks within sequences
 CREATE TABLE IF NOT EXISTS click_details (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     sequence_id          INTEGER NOT NULL REFERENCES click_sequences(id),
@@ -99,10 +93,7 @@ CREATE TABLE IF NOT EXISTS click_details (
     t_ns                 INTEGER NOT NULL
 );
 
--- ══════════════════════════════════════════════════════════
--- MOUSE: Drag Operations
--- ══════════════════════════════════════════════════════════
-
+-- Drag operations (click-hold-move-release)
 CREATE TABLE IF NOT EXISTS drags (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     button      TEXT    NOT NULL,
@@ -115,6 +106,7 @@ CREATE TABLE IF NOT EXISTS drags (
     timestamp   TEXT    NOT NULL
 );
 
+-- Path coordinates during drags (delta-encoded)
 CREATE TABLE IF NOT EXISTS drag_points (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     drag_id  INTEGER NOT NULL REFERENCES drags(id),
@@ -124,10 +116,7 @@ CREATE TABLE IF NOT EXISTS drag_points (
     t_ns     INTEGER NOT NULL
 );
 
--- ══════════════════════════════════════════════════════════
--- MOUSE: Scroll Events
--- ══════════════════════════════════════════════════════════
-
+-- Scroll wheel events
 CREATE TABLE IF NOT EXISTS scrolls (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     movement_id INTEGER REFERENCES movements(id),
@@ -139,10 +128,22 @@ CREATE TABLE IF NOT EXISTS scrolls (
     timestamp   TEXT    NOT NULL
 );
 
--- ══════════════════════════════════════════════════════════
--- KEYBOARD: Individual Keystrokes
--- ══════════════════════════════════════════════════════════
+-- Key-value metadata (path_encoding, etc.)
+CREATE TABLE IF NOT EXISTS metadata (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 
+"""
+
+
+# ══════════════════════════════════════════════════════════════
+# KEYBOARD DATABASE
+# ══════════════════════════════════════════════════════════════
+
+_KEYBOARD_SCHEMA = """
+
+-- Individual key presses with scan codes, vkey, and layout
 CREATE TABLE IF NOT EXISTS keystrokes (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     scan_code         INTEGER NOT NULL,
@@ -157,10 +158,7 @@ CREATE TABLE IF NOT EXISTS keystrokes (
     timestamp         TEXT    NOT NULL
 );
 
--- ══════════════════════════════════════════════════════════
--- KEYBOARD: Key Transitions (scan code pairs + delay)
--- ══════════════════════════════════════════════════════════
-
+-- Delay between consecutive keys (scan code pairs)
 CREATE TABLE IF NOT EXISTS key_transitions (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     from_scan     INTEGER NOT NULL,
@@ -172,10 +170,7 @@ CREATE TABLE IF NOT EXISTS key_transitions (
     t_ns          INTEGER NOT NULL
 );
 
--- ══════════════════════════════════════════════════════════
--- KEYBOARD: Shortcuts
--- ══════════════════════════════════════════════════════════
-
+-- Keyboard shortcut timing profiles
 CREATE TABLE IF NOT EXISTS shortcuts (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     shortcut_name        TEXT    NOT NULL,
@@ -191,10 +186,16 @@ CREATE TABLE IF NOT EXISTS shortcuts (
     timestamp            TEXT    NOT NULL
 );
 
--- ══════════════════════════════════════════════════════════
--- RECORDING SESSIONS
--- ══════════════════════════════════════════════════════════
+"""
 
+
+# ══════════════════════════════════════════════════════════════
+# SESSION DATABASE
+# ══════════════════════════════════════════════════════════════
+
+_SESSION_SCHEMA = """
+
+-- Recording periods (start/end/counts)
 CREATE TABLE IF NOT EXISTS recording_sessions (
     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at             TEXT    NOT NULL,
@@ -205,10 +206,7 @@ CREATE TABLE IF NOT EXISTS recording_sessions (
     perf_counter_start_ns  INTEGER NOT NULL
 );
 
--- ══════════════════════════════════════════════════════════
--- SYSTEM: State Change Events
--- ══════════════════════════════════════════════════════════
-
+-- System state changes (mouse speed, layout, resolution, etc.)
 CREATE TABLE IF NOT EXISTS system_events (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     key       TEXT    NOT NULL,
@@ -217,13 +215,34 @@ CREATE TABLE IF NOT EXISTS system_events (
     timestamp TEXT    NOT NULL
 );
 
--- ══════════════════════════════════════════════════════════
--- METADATA (key-value store)
--- ══════════════════════════════════════════════════════════
-
+-- Key-value metadata store
 CREATE TABLE IF NOT EXISTS metadata (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
 
 """
+
+
+# ── Public init functions ───────────────────────────────────
+
+def init_mouse_db(db_path: Path) -> sqlite3.Connection:
+    """Create mouse database with movement/click/drag/scroll tables."""
+    conn = _init(db_path, _MOUSE_SCHEMA)
+    # Signal delta encoding to post-processing readers
+    conn.execute(
+        "INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)",
+        ("path_encoding", "delta_v1"),
+    )
+    conn.commit()
+    return conn
+
+
+def init_keyboard_db(db_path: Path) -> sqlite3.Connection:
+    """Create keyboard database with keystroke/transition/shortcut tables."""
+    return _init(db_path, _KEYBOARD_SCHEMA)
+
+
+def init_session_db(db_path: Path) -> sqlite3.Connection:
+    """Create session database with recording sessions/system events/metadata."""
+    return _init(db_path, _SESSION_SCHEMA)
