@@ -28,7 +28,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtGui import QIcon
 
 import config
@@ -189,6 +189,11 @@ class Recorder:
 class MainWindow(QMainWindow):
     """Main application window — manages screen transitions and recorder."""
 
+    # Cross-thread signals from tray icon (pystray runs in its own thread)
+    _sig_show_gui = Signal()
+    _sig_stop_recording = Signal()
+    _sig_force_close = Signal()
+
     # Screen indices in the stacked widget
     _LOGIN = 0
     _DASHBOARD = 1
@@ -206,6 +211,11 @@ class MainWindow(QMainWindow):
         self._tray_thread: threading.Thread | None = None
         self._system_monitor: SystemMonitor | None = None
         self._force_quit = False  # True when Quit from tray — bypass minimize
+
+        # Connect cross-thread signals (tray icon runs in pystray thread)
+        self._sig_show_gui.connect(self._show_window)
+        self._sig_stop_recording.connect(self._stop_recording_from_tray)
+        self._sig_force_close.connect(self._force_close)
 
         # ── Stacked widget for screen navigation ──────────────
         self._stack = QStackedWidget()
@@ -451,22 +461,23 @@ class MainWindow(QMainWindow):
             self._tray_thread = None
 
     def _tray_show_gui(self):
-        """Called from tray thread — show/raise the GUI window."""
-        QTimer.singleShot(0, self._show_window)
+        """Called from tray thread — emit signal to Qt thread."""
+        self._sig_show_gui.emit()
 
     def _show_window(self):
         """Show and raise the window (runs on Qt thread)."""
+        self.show()
         self.showNormal()
         self.activateWindow()
         self.raise_()
 
     def _tray_stop_recording(self):
-        """Called from tray thread — stop recording."""
-        QTimer.singleShot(0, self._stop_recording_from_tray)
+        """Called from tray thread — emit signal to Qt thread."""
+        self._sig_stop_recording.emit()
 
     def _tray_quit_app(self):
-        """Called from tray thread — force-close entire application."""
-        QTimer.singleShot(0, self._force_close)
+        """Called from tray thread — emit signal to Qt thread."""
+        self._sig_force_close.emit()
 
     def _force_close(self):
         """Force-close the app (from tray Quit), bypassing minimize-on-close."""
