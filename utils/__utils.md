@@ -14,7 +14,6 @@ functions with no state — any module can import and use them freely.
   🐍 timing.py
   🐍 keyboard_layout.py
   🐍 system_monitor.py
-  🐍 hotkeys.py
 ```
 
 <a id="files"></a>
@@ -88,12 +87,6 @@ for estimating mouse polling rate from move event timestamps.
 |-------|---------|
 | `SystemMonitor` | Polls system state, emits `SystemEventRecord` on change |
 | `PollingRateEstimator` | Estimates mouse Hz from move event intervals |
-
-### `hotkeys.py` — Global Hotkey Registration
-
-Registers the global `Ctrl+Alt+R` hotkey for pausing/resuming recording.
-Uses `pynput.keyboard.GlobalHotKeys` which runs in its own daemon thread.
-The hotkey combo is configurable via `config.HOTKEY_TOGGLE`.
 
 <a id="why-scan-codes"></a>
 

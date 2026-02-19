@@ -1,8 +1,8 @@
 # ui/
 
-System tray interface for the recorder. Provides minimal visual feedback
-and controls without a full window — the recorder runs silently in the
-background with just a tray icon.
+System tray interface for the application. The tray icon is always visible
+after login, providing visual feedback about recording state. It persists
+for the entire logged-in session (not just during recording).
 
 <a id="folder-structure"></a>
 
@@ -42,8 +42,8 @@ Theme is detected once at startup.
 | State | File | Description |
 |-------|------|-------------|
 | Recording | `{theme}/InputDNA-start.png` | Actively recording input |
-| Paused | `{theme}/InputDNA-pause.png` | Paused (via hotkey or menu) |
-| Stopped | `{theme}/InputDNA-stop.png` | Stopped or error |
+| Idle | `{theme}/InputDNA-pause.png` | Recording but no input for 60+ seconds (cosmetic) |
+| Stopped | `{theme}/InputDNA-stop.png` | Not recording (default after login) |
 
 ### `light/` / `dark/` — Theme Icon Folders
 
@@ -59,51 +59,37 @@ resizing to the appropriate system tray size (16-32px depending on DPI).
 
 **Right-click menu:**
 
-| Menu Item | Action |
-|-----------|--------|
-| **Pause / Resume** | Toggles recording on/off. Label updates dynamically. |
-| **Stats** | Shows a Windows toast notification with current counts: movements, clicks, keystrokes, DB queue depth. |
-| **Quit** | Graceful shutdown: stops listeners → flushes DB writer → updates recording session → exits. |
+| Menu Item | Visible | Action |
+|-----------|---------|--------|
+| **Stop Recording** | During recording | Stops recording, icon → red. |
+| **Stats** | Always | Shows a Windows toast notification with current counts (or "Not recording"). |
+| **Quit** | Always | Closes the entire application. |
 
-<a id="threading"></a>
+<a id="lifecycle"></a>
 
-## Threading
+## Lifecycle
 
-```mermaid
-flowchart TB
-    MAIN["Main Thread\n(blocked by tray icon)"]
-    T1["Thread 1: Mouse Listener"]
-    T2["Thread 2: Keyboard Listener"]
-    T3["Thread 3: Event Processor"]
-    T4["Thread 4: DB Writer"]
-
-    MAIN -.- T1
-    MAIN -.- T2
-    MAIN -.- T3
-    MAIN -.- T4
-
-    MAIN -- "Quit / Ctrl+C" --> SHUTDOWN["Graceful Shutdown"]
+```
+Login  →  Tray appears (red/stopped)
+Start  →  Green (recording) → Yellow after 60s idle → Green on input
+Stop   →  Red (stopped) — tray stays visible
+Logout →  Tray removed
+Close  →  Tray removed
 ```
 
-`pystray` requires `Icon.run()` to block the main thread on Windows.
-All other components (listeners, processor, writer) run in daemon threads.
-When the tray icon stops (via Quit or Ctrl+C), the main thread unblocks
-and triggers graceful shutdown.
+The tray icon runs in a daemon thread (`pystray.Icon.run()` blocks).
+It persists from login to logout/close, independent of recording state.
 
-<a id="why-not-a-full-gui"></a>
+<a id="tray-at-a-glance"></a>
 
-## Why Not a Full GUI?
-
-The recorder is designed to run invisibly. A full window would be
-distracting and unnecessary — all you need to know is:
+## Tray at a Glance
 
 | Question | Answer |
 |----------|--------|
 | Is it recording? | Green mouse icon (start) |
-| Is it paused? | Yellow mouse icon (pause) |
+| Is the user idle? | Yellow mouse icon (pause) — cosmetic only |
 | Is it stopped? | Red mouse icon (stop) |
 | How much data so far? | Stats menu → toast notification |
-| How to pause/stop? | Right-click menu or `Ctrl+Alt+R` |
 
 The separate `gui/` package handles the full PySide6 dashboard for
 user profiles, training, and validation — that's a different concern.
