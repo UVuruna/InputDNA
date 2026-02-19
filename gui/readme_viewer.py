@@ -310,7 +310,13 @@ def _render_all_docs(project_root: Path, output_dir: Path, palette: dict):
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True)
 
-    md_files = list(project_root.glob("*.md")) + list(project_root.rglob("__*.md"))
+    # Render ALL .md files: root, docs/, __folder.md, etc.
+    # Exclude build artifacts (build/, dist/, .git/, venv/, __pycache__/)
+    skip = {"build", "dist", ".git", "venv", "__pycache__", ".venv"}
+    md_files = [
+        p for p in project_root.rglob("*.md")
+        if not any(part in skip for part in p.relative_to(project_root).parts)
+    ]
 
     md_converter = markdown.Markdown(
         extensions=["tables", "fenced_code", "toc"],
