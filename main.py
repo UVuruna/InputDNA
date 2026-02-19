@@ -224,6 +224,10 @@ class MainWindow(QMainWindow):
         self._stats_timer = QTimer(self)
         self._stats_timer.timeout.connect(self._update_stats)
 
+        # Polling rate check timer (runs after login until estimation completes)
+        self._polling_check_timer = QTimer(self)
+        self._polling_check_timer.timeout.connect(self._check_polling_rate)
+
         # Start on login screen
         self._stack.setCurrentIndex(self._LOGIN)
 
@@ -246,6 +250,7 @@ class MainWindow(QMainWindow):
         self._polling_estimator = start_polling_estimation(
             on_done=self._on_polling_rate_estimated,
         )
+        self._polling_check_timer.start(500)
 
         # Create screens that need user context
         self._create_user_screens(profile)
@@ -290,15 +295,28 @@ class MainWindow(QMainWindow):
     def _on_polling_rate_estimated(self, hz: int):
         """Called from estimator thread when polling rate is determined."""
         # Update dashboard from Qt thread
-        QTimer.singleShot(0, lambda: self._dashboard.update_system_info(
-            get_all_state(), hz,
-        ) if self._dashboard else None)
+        QTimer.singleShot(0, lambda: self._apply_polling_rate(hz))
+
+    def _apply_polling_rate(self, hz: int):
+        """Apply estimated polling rate to dashboard (runs on Qt thread)."""
+        self._polling_check_timer.stop()
+        if self._dashboard:
+            self._dashboard.update_system_info(get_all_state(), hz)
+
+    def _check_polling_rate(self):
+        """Periodic check until polling rate is estimated (before recording)."""
+        hz = config.ESTIMATED_POLLING_HZ
+        if hz is not None:
+            self._polling_check_timer.stop()
+            if self._dashboard:
+                self._dashboard.update_system_info(get_all_state(), hz)
 
     def _on_logout(self):
         """Stop recording if active, remove tray, reset config, go back to login."""
         if self._recorder:
             self._stop_recording()
 
+        self._polling_check_timer.stop()
         self._stop_tray()
 
         config.reset_to_defaults()

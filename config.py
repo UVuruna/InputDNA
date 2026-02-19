@@ -158,7 +158,7 @@ FLUSH_INTERVAL_S = 2.0
 SYSTEM_MONITOR_INTERVAL_S = 10.0
 
 # Number of mouse move events to sample for polling rate estimation.
-POLLING_RATE_SAMPLE_COUNT = 500
+POLLING_RATE_SAMPLE_COUNT = 50
 
 # Estimated mouse polling rate (Hz). Set at runtime by the polling rate
 # estimator after login. None means not yet measured.
