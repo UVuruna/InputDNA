@@ -6,15 +6,12 @@ All settings are stored per-user in profiles.db and override
 the defaults in config.py when the user is logged in.
 """
 
-import ctypes
 import logging
-import winreg
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QGridLayout, QComboBox, QSlider, QSpinBox,
-    QCheckBox, QKeySequenceEdit, QMessageBox, QScrollArea,
-    QLineEdit, QFileDialog,
+    QKeySequenceEdit, QMessageBox, QScrollArea,
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -22,47 +19,6 @@ import config
 from gui.user_settings import save_settings, load_settings, delete_settings
 
 logger = logging.getLogger(__name__)
-
-# Registry key for Windows autostart
-_AUTOSTART_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_AUTOSTART_NAME = "InputDNA"
-
-
-def _get_exe_path() -> str:
-    """Get the executable path for autostart registry entry."""
-    import sys
-    if getattr(sys, 'frozen', False):
-        return sys.executable
-    return f'"{sys.executable}" "{__file__}"'
-
-
-def _is_autostart_enabled() -> bool:
-    """Check if InputDNA is set to start with Windows."""
-    try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_READ)
-        winreg.QueryValueEx(key, _AUTOSTART_NAME)
-        winreg.CloseKey(key)
-        return True
-    except FileNotFoundError:
-        return False
-    except OSError:
-        return False
-
-
-def _set_autostart(enabled: bool) -> None:
-    """Enable or disable Windows autostart for InputDNA."""
-    try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE)
-        if enabled:
-            winreg.SetValueEx(key, _AUTOSTART_NAME, 0, winreg.REG_SZ, _get_exe_path())
-        else:
-            try:
-                winreg.DeleteValue(key, _AUTOSTART_NAME)
-            except FileNotFoundError:
-                pass
-        winreg.CloseKey(key)
-    except OSError as e:
-        logger.error(f"Failed to set autostart: {e}")
 
 
 class SettingsScreen(QWidget):
@@ -177,11 +133,6 @@ class SettingsScreen(QWidget):
         sys_layout.setSpacing(10)
         row = 0
 
-        # Start with Windows
-        self._autostart_check = QCheckBox("Start with Windows")
-        sys_layout.addWidget(self._autostart_check, row, 0, 1, 2)
-        row += 1
-
         # DPI
         sys_layout.addWidget(QLabel("Mouse DPI:"), row, 0)
         dpi_row = QHBoxLayout()
@@ -196,28 +147,6 @@ class SettingsScreen(QWidget):
         row += 1
 
         layout.addWidget(sys_group)
-
-        # ── Storage Settings ────────────────────────────────
-        storage_group = QGroupBox("Storage")
-        storage_layout = QGridLayout(storage_group)
-        storage_layout.setSpacing(10)
-
-        storage_layout.addWidget(QLabel("Data location:"), 0, 0)
-        path_row = QHBoxLayout()
-        self._data_dir_edit = QLineEdit()
-        self._data_dir_edit.setPlaceholderText("Default (data/db/)")
-        self._data_dir_edit.setReadOnly(True)
-        path_row.addWidget(self._data_dir_edit)
-        browse_btn = QPushButton("Browse")
-        browse_btn.clicked.connect(self._browse_data_dir)
-        path_row.addWidget(browse_btn)
-        clear_btn = QPushButton("Reset")
-        clear_btn.setToolTip("Use default location")
-        clear_btn.clicked.connect(self._clear_data_dir)
-        path_row.addWidget(clear_btn)
-        storage_layout.addLayout(path_row, 0, 1)
-
-        layout.addWidget(storage_group)
 
         # ── Calibration ──────────────────────────────────────
         cal_group = QGroupBox("Calibration")
@@ -281,20 +210,11 @@ class SettingsScreen(QWidget):
         # Hotkey — display current value as label (QKeySequenceEdit can't parse pynput format)
         self._hotkey_edit.setToolTip(f"Current: {config.HOTKEY_TOGGLE}")
 
-        # Autostart
-        self._autostart_check.setChecked(_is_autostart_enabled())
-
         # DPI
         self._dpi_spin.setValue(config.USER_DPI)
 
         # Click gap
         self._update_click_gap_display()
-
-        # Data location
-        if config.CUSTOM_USER_DATA_DIR:
-            self._data_dir_edit.setText(config.CUSTOM_USER_DATA_DIR)
-        else:
-            self._data_dir_edit.clear()
 
     def _update_click_gap_display(self):
         """Update the click gap label with current value."""
@@ -330,21 +250,12 @@ class SettingsScreen(QWidget):
 
         # System settings
         settings["system.dpi"] = str(self._dpi_spin.value())
-        settings["system.start_with_windows"] = str(
-            self._autostart_check.isChecked()
-        )
-
-        # Storage settings
-        settings["storage.data_dir"] = self._data_dir_edit.text()
 
         # Persist to DB
         save_settings(self._user_id, settings)
 
         # Apply to config module
         config.apply_user_settings(settings)
-
-        # Handle autostart registry
-        _set_autostart(self._autostart_check.isChecked())
 
         self.settings_changed_signal.emit(settings)
         QMessageBox.information(self, "Settings", "Settings saved successfully.")
@@ -370,20 +281,6 @@ class SettingsScreen(QWidget):
         """Called externally after click calibration dialog."""
         config.CLICK_SEQUENCE_GAP_MS = gap_ms
         self._update_click_gap_display()
-
-    def _browse_data_dir(self):
-        """Open folder picker for custom data location."""
-        current = self._data_dir_edit.text() or str(config.DB_DIR)
-        folder = QFileDialog.getExistingDirectory(
-            self, "Choose Data Location", current,
-            QFileDialog.ShowDirsOnly,
-        )
-        if folder:
-            self._data_dir_edit.setText(folder)
-
-    def _clear_data_dir(self):
-        """Reset data location to default."""
-        self._data_dir_edit.clear()
 
 
 def _qt_keysequence_to_pynput(qt_str: str) -> str:

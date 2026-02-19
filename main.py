@@ -47,6 +47,7 @@ from gui.dpi_dialog import DpiMeasurementDialog
 from gui.styles import DARK_STYLE
 from gui.user_db import UserProfile
 from gui.user_settings import load_settings
+from gui.global_settings import load_globals
 
 # ── Logging setup ──────────────────────────────────────────
 logging.basicConfig(
@@ -258,8 +259,7 @@ class MainWindow(QMainWindow):
         self._user = profile
         logger.info(f"User logged in: {profile.username} (id={profile.id})")
 
-        # Apply per-user settings FIRST (storage.data_dir must be set
-        # before set_active_user computes the folder path)
+        # Apply per-user settings (DPI, downsampling, etc.)
         user_settings = load_settings(profile.id)
         if user_settings:
             config.apply_user_settings(user_settings)
@@ -479,9 +479,22 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
+def _apply_global_settings():
+    """Load global settings from profiles.db and apply to config module."""
+    settings = load_globals()
+    data_dir = settings.get("storage.data_dir", "")
+    config.CUSTOM_USER_DATA_DIR = data_dir
+    config.START_WITH_WINDOWS = settings.get(
+        "system.start_with_windows", ""
+    ).lower() == "true"
+
+
 def main():
     app = QApplication(sys.argv)
     app.setStyleSheet(DARK_STYLE)
+
+    # Load global settings (data location, autostart) before anything else
+    _apply_global_settings()
 
     # Set application icon (title bar + taskbar)
     icon_path = Path(__file__).parent / "setup" / "InputDNA.ico"

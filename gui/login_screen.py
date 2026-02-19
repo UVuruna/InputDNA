@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, QDate, Qt
 
 from gui.user_db import UserProfile, register, login, get_all_profiles
+from gui.global_settings_dialog import GlobalSettingsDialog
 
 
 class LoginScreen(QWidget):
@@ -56,6 +57,19 @@ class LoginScreen(QWidget):
         layout.addWidget(tabs, alignment=Qt.AlignCenter)
 
         layout.addStretch()
+
+        # Settings button — bottom right
+        settings_row = QHBoxLayout()
+        settings_row.addStretch()
+        settings_btn = QPushButton("Settings")
+        settings_btn.clicked.connect(self._open_global_settings)
+        settings_row.addWidget(settings_btn)
+        layout.addLayout(settings_row)
+
+    def _open_global_settings(self):
+        """Open the global settings dialog."""
+        dialog = GlobalSettingsDialog(self)
+        dialog.exec()
 
     def _build_login_tab(self) -> QWidget:
         w = QWidget()

@@ -200,8 +200,6 @@ _SETTING_MAP: dict[str, tuple[str, type]] = {
     "recording.hotkey_toggle":          ("HOTKEY_TOGGLE", str),
     "recording.click_sequence_gap_ms":  ("CLICK_SEQUENCE_GAP_MS", int),
     "system.dpi":                       ("USER_DPI", int),
-    "system.start_with_windows":        ("START_WITH_WINDOWS", lambda v: v.lower() == "true"),
-    "storage.data_dir":                 ("CUSTOM_USER_DATA_DIR", str),
 }
 
 # Snapshot of default values — populated at module load, used by reset_to_defaults().

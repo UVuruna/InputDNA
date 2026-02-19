@@ -13,6 +13,8 @@ PySide6 desktop GUI for the Human Input Recorder.
   🐍 calibration_dialog.py
   🐍 dpi_dialog.py
   🐍 export_utils.py
+  🐍 global_settings.py
+  🐍 global_settings_dialog.py
   🐍 login_screen.py
   🐍 main_dashboard.py
   🐍 settings_screen.py
@@ -56,7 +58,10 @@ This creates a **personal profile** — the model being trained is THEIR
 personalized robot. Profile data stored locally in SQLite (`profiles.db`).
 
 Returning users log in with username only. Each user gets their own
-recording database at `data/db/user_{id}/movements.db`.
+recording databases at `data/db/Username_Surname_YYYY-MM-DD/`.
+
+A **Settings** button (bottom-right) opens the Global Settings dialog for
+application-wide options (data location, start with Windows).
 
 ### Screen 2: Main Dashboard
 
@@ -74,7 +79,17 @@ Three primary actions + Settings:
 - **Mouse:** Waits for user's movement (start->end), model predicts path shape, compares with actual
 - **Keyboard:** Model predicts timing/delays, compares with actual typing
 
-### Screen 3: Settings
+### Global Settings (Login Screen)
+
+Application-wide settings accessible from the login screen via the Settings button.
+Stored in `global_settings` table in `profiles.db`. Loaded at app start before login.
+
+| Setting | Control | Default |
+|---------|---------|---------|
+| Data location | Browse/Reset | `data/db/` |
+| Start with Windows | Checkbox | Off |
+
+### Screen 3: Per-User Settings
 
 Per-user configurable options stored in `profiles.db` via the `user_settings` table.
 
@@ -92,7 +107,6 @@ Per-user configurable options stored in `profiles.db` via the `user_settings` ta
 
 | Setting | Control | Default |
 |---------|---------|---------|
-| Start with Windows | Checkbox | Off |
 | Mouse DPI | SpinBox + Measure button | 800 |
 
 **Calibration:**
@@ -109,11 +123,26 @@ Reset to defaults restores original values and clears saved settings.
 
 ## Files
 
+### `global_settings.py` — Global Settings Persistence
+
+CRUD for the `global_settings` table in `profiles.db`. Stores
+application-wide key-value settings (not scoped to any user).
+Functions: `save_global()`, `save_globals()`, `load_globals()`,
+`load_global()`.
+
+### `global_settings_dialog.py` — Global Settings Dialog
+
+QDialog opened from the login screen's Settings button. Contains
+data location (Browse/Reset) and Start with Windows checkbox.
+Also contains Windows registry autostart functions (moved from
+`settings_screen.py`).
+
 ### `login_screen.py` — Login / Register Page
 
 Two tabs: Login and Register. Register collects username, surname,
 date of birth. Login requires username only. Profile stored in
-`profiles` table in SQLite.
+`profiles` table in SQLite. Settings button (bottom-right) opens
+the Global Settings dialog.
 
 ### `main_dashboard.py` — Main Control Panel
 
@@ -132,12 +161,15 @@ status, model status, and system info panel.
 
 Updated via `update_system_info()` method called from the application layer.
 
-### `settings_screen.py` — Settings Page
+### `settings_screen.py` — Per-User Settings Page
 
-Per-user settings with recording config, system options, and calibration.
+Per-user settings with recording config, DPI, and calibration.
 Reads current values from `config.*` on load, saves to `user_settings`
 table on Save. Emits `settings_changed_signal` when settings are saved
 and `calibrate_click_signal` / `calibrate_dpi_signal` for calibration dialogs.
+
+Global settings (data location, autostart) are NOT here — they are in
+`global_settings_dialog.py` accessible from the login screen.
 
 ### `validation_screen.py` — Model Validation View
 
@@ -153,7 +185,7 @@ group boxes, progress bars, and key sequence editors.
 ### `user_db.py` — User Profile Database
 
 Manages the `profiles` table for login/register. Separate from
-the recording database (per-user `movements.db`).
+the recording databases (per-user `mouse.db`, `keyboard.db`, `session.db`).
 
 ### `user_settings.py` — Per-user Settings Persistence
 
