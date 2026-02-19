@@ -22,16 +22,18 @@ from utils.keyboard_layout import infer_hand, infer_finger
 
 logger = logging.getLogger(__name__)
 
-# Modifier scan codes (to detect shortcuts and exclude from transitions)
-_MODIFIER_SCANS = {
+# ── Scan code sets ────────────────────────────────────────────
+# Used internally for typing mode detection and imported by
+# EventProcessor for keystroke classification (dashboard stats).
+
+MODIFIER_SCANS = frozenset({
     0x1D, 0xE01D,  # Left/Right Ctrl
     0x38, 0xE038,  # Left/Right Alt
     0x2A, 0x36,    # Left/Right Shift
     0x5B, 0x5C,    # Left/Right Win
-}
+})
 
-# Numpad scan codes
-_NUMPAD_SCANS = {
+NUMPAD_SCANS = frozenset({
     0x45,   # Num Lock
     0xE035, # Numpad /
     0x37,   # Numpad *
@@ -42,25 +44,43 @@ _NUMPAD_SCANS = {
     0x4F, 0x50, 0x51,  # 1, 2, 3
     0x52, 0x53,         # 0, .
     0xE01C,             # Numpad Enter
-}
+})
 
-# Common programming scan codes (brackets, operators, etc.)
-_CODE_SCANS = {
+CODE_SCANS = frozenset({
     0x1A, 0x1B,  # [ ]
     0x27, 0x28,  # ; '
     0x2B,        # backslash
     0x0C, 0x0D,  # - =
     0x29,        # ` ~
-}
+})
+
+LETTER_SCANS = frozenset({
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19,  # Q-P
+    0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26,        # A-L
+    0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x32,                    # Z-M
+})
+
+NUMBER_ROW_SCANS = frozenset({
+    0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B,  # 1-0
+})
+
+WHITESPACE_SCANS = frozenset({
+    0x39,   # Space
+    0x0F,   # Tab
+    0x1C,   # Enter
+    0xE01C, # Numpad Enter
+})
+
+CAPSLOCK_SCAN = 0x3A
 
 
 def _detect_typing_mode(scan: int, modifier_state: dict) -> str:
     """Classify current typing context."""
     if any(modifier_state.get(m) for m in ("ctrl", "alt", "win")):
         return "shortcut"
-    if scan in _NUMPAD_SCANS:
+    if scan in NUMPAD_SCANS:
         return "numpad"
-    if scan in _CODE_SCANS:
+    if scan in CODE_SCANS:
         return "code"
     return "text"
 
@@ -100,7 +120,7 @@ class KeyboardProcessor:
     def process_press(self, event: RawKeyPress):
         """Process a key press event."""
         scan = event.scan_code
-        is_mod = scan in _MODIFIER_SCANS
+        is_mod = scan in MODIFIER_SCANS
 
         # Store press context for use on release
         self._press_context[scan] = (
@@ -141,7 +161,7 @@ class KeyboardProcessor:
     def process_release(self, event: RawKeyRelease):
         """Process a key release event."""
         scan = event.scan_code
-        is_mod = scan in _MODIFIER_SCANS
+        is_mod = scan in MODIFIER_SCANS
 
         # Retrieve press context (vkey, layout, modifiers stored on press)
         vkey, active_layout, modifier_json = self._press_context.pop(scan, (0, "", "{}"))

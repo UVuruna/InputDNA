@@ -150,10 +150,11 @@ class Recorder:
 
         # Finalize recording session (in session.db)
         if self._recording_session and self._processor:
+            t = self._processor.stats.get_totals()
             self._recording_session.ended_at = wall_clock_iso()
-            self._recording_session.total_movements = self._processor.movement_count
-            self._recording_session.total_clicks = self._processor.click_count
-            self._recording_session.total_keystrokes = self._processor.keystroke_count
+            self._recording_session.total_movements = t["movements"]
+            self._recording_session.total_clicks = t["clicks"]
+            self._recording_session.total_keystrokes = t["keystrokes"]
 
             import sqlite3
             conn = sqlite3.connect(str(self._session_db))
@@ -163,24 +164,18 @@ class Recorder:
 
         logger.info("Recording session ended.")
         if self._processor:
+            t = self._processor.stats.get_totals()
             logger.info(
-                f"  Movements: {self._processor.movement_count}\n"
-                f"  Clicks:    {self._processor.click_count}\n"
-                f"  Keystrokes:{self._processor.keystroke_count}\n"
+                f"  Movements: {t['movements']}\n"
+                f"  Clicks:    {t['clicks']}\n"
+                f"  Keystrokes:{t['keystrokes']}\n"
                 f"  DB writes: {self._db_writer.total_written if self._db_writer else 0}"
             )
 
     @property
-    def movement_count(self) -> int:
-        return self._processor.movement_count if self._processor else 0
-
-    @property
-    def click_count(self) -> int:
-        return self._processor.click_count if self._processor else 0
-
-    @property
-    def keystroke_count(self) -> int:
-        return self._processor.keystroke_count if self._processor else 0
+    def stats(self):
+        """Access the processor's StatsTracker (or None if not recording)."""
+        return self._processor.stats if self._processor else None
 
     @property
     def pending_writes(self) -> int:
@@ -402,11 +397,12 @@ class MainWindow(QMainWindow):
     def _update_stats(self):
         """Update dashboard stats, system info, and tray/login idle state (runs on timer)."""
         if self._recorder and self._dashboard:
-            self._dashboard.update_stats(
-                self._recorder.movement_count,
-                self._recorder.click_count,
-                self._recorder.keystroke_count,
-            )
+            stats = self._recorder.stats
+            if stats:
+                self._dashboard.update_stats(
+                    stats.get_totals(),
+                    stats.get_windowed(config.STATS_WINDOW_MINUTES),
+                )
             # Update system info periodically
             if self._system_monitor:
                 self._dashboard.update_system_info(
@@ -483,12 +479,15 @@ class MainWindow(QMainWindow):
             self._dashboard.stop_recording_signal.emit()
 
     def _get_stats_text(self) -> str:
-        if not self._recorder:
+        """Tray icon stats — basic summary only."""
+        stats = self._recorder.stats if self._recorder else None
+        if not stats:
             return "Not recording"
+        t = stats.get_totals()
         return (
-            f"Movements: {self._recorder.movement_count}\n"
-            f"Clicks: {self._recorder.click_count}\n"
-            f"Keystrokes: {self._recorder.keystroke_count}\n"
+            f"Movements: {t['movements']}\n"
+            f"Clicks: {t['clicks']}\n"
+            f"Keystrokes: {t['keystrokes']}\n"
             f"DB queue: {self._recorder.pending_writes}"
         )
 

@@ -178,6 +178,13 @@ def snap_polling_rate(raw_hz: int) -> int:
 IDLE_ICON_TIMEOUT_S = 60
 
 # ─────────────────────────────────────────────────────────────
+# DASHBOARD STATS
+# ─────────────────────────────────────────────────────────────
+# Time window for the "Last N min" stats view on the dashboard.
+# Valid values: 10, 20, 30, 40, 50, 60. Per-user setting.
+STATS_WINDOW_MINUTES = 30
+
+# ─────────────────────────────────────────────────────────────
 # CALIBRATION
 # ─────────────────────────────────────────────────────────────
 # Number of clicks required for click speed calibration.
@@ -218,6 +225,7 @@ _SETTING_MAP: dict[str, tuple[str, type]] = {
     "recording.db_rotation_max_bytes":  ("DB_ROTATION_MAX_BYTES", int),
     "recording.click_sequence_gap_ms":  ("CLICK_SEQUENCE_GAP_MS", int),
     "system.dpi":                       ("USER_DPI", int),
+    "recording.stats_window_minutes":   ("STATS_WINDOW_MINUTES", int),
 }
 
 # Snapshot of default values — populated at module load, used by reset_to_defaults().
