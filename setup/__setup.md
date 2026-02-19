@@ -22,7 +22,7 @@ Build and installation scripts for packaging InputDNA as a distributable Windows
 ### `build.py` — Main Build Script
 
 Orchestrates the full build pipeline:
-1. Generates ICO from SVG logo (`svg_to_ico.py`)
+1. Generates ICO files from SVG logos (`svg_to_ico.py` — dark + light variants)
 2. Runs PyInstaller in `--onedir` mode (no console, UAC admin)
 3. Signs the exe with the self-signed certificate (if available)
 4. Calls NSIS `makensis` to create `InputDNA_Setup.exe`
@@ -56,24 +56,32 @@ Uninstaller removes program files but preserves user data.
 
 ### `svg_to_ico.py` — ICO Generator
 
-Renders `support/logo/light/UV-InputDNA.svg` into a multi-resolution ICO file
-at `setup/InputDNA.ico`. Uses PySide6 `QSvgRenderer` + Pillow.
+Generates two multi-resolution ICO files from the UV-InputDNA.svg logos:
+
+| ICO File | SVG Source | Used For |
+|----------|-----------|----------|
+| `InputDNA.ico` | `support/logo/dark/` | Exe binary icon, shortcuts, taskbar, Add/Remove Programs |
+| `InputDNA-setup.ico` | `support/logo/light/` | Installer wizard icon (`InputDNA_Setup.exe`) |
+
+Uses PySide6 `QSvgRenderer` + Pillow. Renders each size individually from
+SVG for crisp results at all resolutions (16, 32, 48, 64, 128, 256px).
 
 Called automatically by `build.py` as the first step. Can also be run
 standalone: `python setup/svg_to_ico.py`
 
-Uses the light-theme variant (dark outlines) for the static ICO — best
-visibility across most OS contexts (Explorer, shortcuts, Add/Remove Programs).
+### `InputDNA.ico` / `InputDNA-setup.ico` — Application Icons
 
-### `InputDNA.ico` — Application Icon
+Generated from `UV-InputDNA.svg` by `svg_to_ico.py`. Each contains multiple
+resolutions (16, 32, 48, 64, 128, 256px).
 
-Generated from `UV-InputDNA.svg` by `svg_to_ico.py`. Contains multiple
-resolutions (16, 32, 48, 64, 128, 256px). Used by PyInstaller (exe binary
-icon) and NSIS (installer icon, shortcuts).
+- **`InputDNA.ico`** (dark variant) — embedded in exe by PyInstaller, used for
+  shortcuts and Add/Remove Programs display icon
+- **`InputDNA-setup.ico`** (light variant) — used as the installer wizard icon
+  and the `InputDNA_Setup.exe` file icon
 
 > **Note:** At runtime, the window title bar and taskbar icon use the
 > theme-aware SVG directly (`support/logo/{theme}/UV-InputDNA.svg`), not
-> the ICO. The ICO is only for the exe file icon and installer.
+> the ICO. The ICO files are only for the static exe/installer file icons.
 
 ## Installed File Layout
 

@@ -2,7 +2,7 @@
 Build InputDNA into a distributable package.
 
 Steps:
-  1. Generate ICO from SVG logo (svg_to_ico)
+  1. Generate ICOs from SVG logos (svg_to_ico — dark + light variants)
   2. Run PyInstaller (--onedir mode) to create the exe
   3. Sign the exe with self-signed certificate
   4. Call NSIS to create the installer
@@ -28,7 +28,8 @@ PROJECT_DIR = SETUP_DIR.parent
 DIST_DIR = PROJECT_DIR / "dist"
 BUILD_DIR = PROJECT_DIR / "build"
 
-ICON_PATH = SETUP_DIR / "InputDNA.ico"
+ICON_PATH = SETUP_DIR / "InputDNA.ico"              # dark variant — exe, shortcuts
+SETUP_ICON_PATH = SETUP_DIR / "InputDNA-setup.ico"  # light variant — installer wizard
 CERT_PATH = SETUP_DIR / "cert" / "InputDNA.pfx"
 NSI_PATH = SETUP_DIR / "installer.nsi"
 
@@ -56,7 +57,7 @@ def run(cmd: list[str], **kwargs):
 
 
 def generate_ico():
-    step("1/4  Generating ICO from SVG")
+    step("1/4  Generating ICOs from SVG logos")
     run([sys.executable, str(SETUP_DIR / "svg_to_ico.py")])
 
 

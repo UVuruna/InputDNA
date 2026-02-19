@@ -37,8 +37,8 @@ RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 
 ; -- Icon ---------------------------------------------------------
-!define MUI_ICON "${SETUP_DIR}\InputDNA.ico"
-!define MUI_UNICON "${SETUP_DIR}\InputDNA.ico"
+!define MUI_ICON "${SETUP_DIR}\InputDNA-setup.ico"
+!define MUI_UNICON "${SETUP_DIR}\InputDNA-setup.ico"
 
 ; -- Interface Settings -------------------------------------------
 !define MUI_ABORTWARNING

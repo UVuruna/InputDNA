@@ -1,8 +1,11 @@
 """
-Generate InputDNA.ico from UV-InputDNA.svg.
+Generate ICO files from UV-InputDNA.svg logos.
 
-Renders the SVG at each ICO size individually for crisp results,
-then saves as a multi-resolution ICO file.
+Two ICO files are produced:
+  - InputDNA.ico       (dark variant) — exe icon, shortcuts, taskbar
+  - InputDNA-setup.ico (light variant) — installer wizard
+
+Renders each ICO size individually from SVG for crisp results.
 
 Called automatically by build.py. Can also be run standalone:
     python setup/svg_to_ico.py
@@ -21,11 +24,16 @@ from PIL import Image
 SETUP_DIR = Path(__file__).parent
 PROJECT_DIR = SETUP_DIR.parent
 
-SVG_PATH = PROJECT_DIR / "support" / "logo" / "light" / "UV-InputDNA.svg"
-ICO_PATH = SETUP_DIR / "InputDNA.ico"
+LOGO_DIR = PROJECT_DIR / "support" / "logo"
 
 # Standard Windows ICO sizes
 ICO_SIZES = [16, 32, 48, 64, 128, 256]
+
+# Which SVG variant → which ICO file
+ICO_VARIANTS = {
+    "dark": SETUP_DIR / "InputDNA.ico",          # exe, shortcuts, taskbar
+    "light": SETUP_DIR / "InputDNA-setup.ico",    # installer wizard
+}
 
 
 def _render_svg_to_pil(renderer: QSvgRenderer, size: int) -> Image.Image:
@@ -41,47 +49,54 @@ def _render_svg_to_pil(renderer: QSvgRenderer, size: int) -> Image.Image:
     return Image.frombytes("RGBA", (size, size), buf, "raw", "BGRA")
 
 
-def generate_ico() -> Path:
-    """Generate InputDNA.ico from UV-InputDNA.svg. Returns the ICO path."""
-    if not SVG_PATH.exists():
-        raise FileNotFoundError(f"SVG not found: {SVG_PATH}")
-
-    app = QGuiApplication.instance()
-    if app is None:
-        app = QGuiApplication(sys.argv)
-
-    renderer = QSvgRenderer(str(SVG_PATH))
+def _render_ico(svg_path: Path, ico_path: Path) -> Path:
+    """Render an SVG to a multi-resolution ICO file."""
+    renderer = QSvgRenderer(str(svg_path))
     if not renderer.isValid():
-        raise RuntimeError(f"Failed to load SVG: {SVG_PATH}")
+        raise RuntimeError(f"Failed to load SVG: {svg_path}")
 
-    # Render each size individually from SVG for maximum sharpness
     frames = []
     for size in ICO_SIZES:
         img = _render_svg_to_pil(renderer, size)
-        # Verify the frame isn't fully transparent (debug)
-        if img.getextrema()[3] == (0, 0):  # alpha channel min/max both 0
+        if img.getextrema()[3] == (0, 0):
             print(f"  WARNING: {size}x{size} frame is fully transparent!")
         frames.append(img)
 
-    # Save: first frame is the base, rest go in append_images
-    # The largest frame should be first (Windows uses it as the primary)
-    frames.reverse()  # 256 first, 16 last
+    # Largest frame first (Windows uses it as the primary)
+    frames.reverse()
     frames[0].save(
-        str(ICO_PATH),
+        str(ico_path),
         format="ICO",
         append_images=frames[1:],
     )
 
-    return ICO_PATH
+    return ico_path
+
+
+def generate_icos() -> dict[str, Path]:
+    """Generate all ICO variants. Returns dict of theme→path."""
+    # QSvgRenderer needs a QGuiApplication
+    app = QGuiApplication.instance()
+    if app is None:
+        app = QGuiApplication(sys.argv)
+
+    results = {}
+    for theme, ico_path in ICO_VARIANTS.items():
+        svg_path = LOGO_DIR / theme / "UV-InputDNA.svg"
+        if not svg_path.exists():
+            raise FileNotFoundError(f"SVG not found: {svg_path}")
+
+        _render_ico(svg_path, ico_path)
+        size_kb = ico_path.stat().st_size / 1024
+        print(f"  {ico_path.name} ({size_kb:.0f} KB) ← {theme}/UV-InputDNA.svg")
+        results[theme] = ico_path
+
+    return results
 
 
 def main():
-    print(f"Source: {SVG_PATH}")
-
-    ico_path = generate_ico()
-
-    size_kb = ico_path.stat().st_size / 1024
-    print(f"Output: {ico_path} ({size_kb:.0f} KB)")
+    print("Generating ICO files from SVG logos:")
+    generate_icos()
     print(f"Sizes: {', '.join(f'{s}x{s}' for s in ICO_SIZES)}")
 
 
