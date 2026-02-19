@@ -2,6 +2,7 @@
 Global settings dialog — application-wide settings accessible from login screen.
 
 Contains settings that are NOT per-user:
+- Appearance theme (dark / light / auto)
 - Data storage location
 - Start with Windows
 """
@@ -10,13 +11,16 @@ import logging
 import winreg
 
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QGridLayout, QCheckBox, QLineEdit, QFileDialog,
+    QComboBox,
 )
 from PySide6.QtCore import Qt
 
 import config
 from gui.global_settings import save_globals, load_globals
+from gui.styles import get_stylesheet
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +68,30 @@ class GlobalSettingsDialog(QDialog):
         self._build_ui()
         self._load_current_values()
 
+    # Theme combo items: (display text, DB value)
+    _THEME_OPTIONS = [
+        ("Dark", "dark"),
+        ("Light", "light"),
+        ("Windows (follow system)", "auto"),
+    ]
+
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
         layout.setContentsMargins(20, 20, 20, 20)
+
+        # ── Appearance ─────────────────────────────────────
+        appearance_group = QGroupBox("Appearance")
+        appearance_layout = QGridLayout(appearance_group)
+        appearance_layout.setSpacing(10)
+
+        appearance_layout.addWidget(QLabel("Theme:"), 0, 0)
+        self._theme_combo = QComboBox()
+        for label, value in self._THEME_OPTIONS:
+            self._theme_combo.addItem(label, value)
+        appearance_layout.addWidget(self._theme_combo, 0, 1)
+
+        layout.addWidget(appearance_group)
 
         # ── Storage ─────────────────────────────────────────
         storage_group = QGroupBox("Storage")
@@ -120,6 +144,14 @@ class GlobalSettingsDialog(QDialog):
 
     def _load_current_values(self):
         """Load current global settings."""
+        # Theme
+        saved = load_globals()
+        theme = saved.get("appearance.theme", "dark")
+        idx = self._theme_combo.findData(theme)
+        if idx >= 0:
+            self._theme_combo.setCurrentIndex(idx)
+
+        # Data dir
         if config.CUSTOM_USER_DATA_DIR:
             self._data_dir_edit.setText(config.CUSTOM_USER_DATA_DIR)
         self._autostart_check.setChecked(_is_autostart_enabled())
@@ -136,13 +168,18 @@ class GlobalSettingsDialog(QDialog):
 
     def _save(self):
         """Save global settings to DB and apply."""
+        theme = self._theme_combo.currentData()
         settings = {
+            "appearance.theme": theme,
             "storage.data_dir": self._data_dir_edit.text(),
             "system.start_with_windows": str(self._autostart_check.isChecked()),
         }
 
         # Persist to profiles.db
         save_globals(settings)
+
+        # Apply theme immediately
+        QApplication.instance().setStyleSheet(get_stylesheet(theme))
 
         # Apply to config
         config.CUSTOM_USER_DATA_DIR = settings["storage.data_dir"]

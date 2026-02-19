@@ -79,9 +79,7 @@ class ValidationScreen(QWidget):
         mouse_layout = QVBoxLayout(mouse_group)
 
         self._mouse_score_label = QLabel("Overall: —")
-        self._mouse_score_label.setStyleSheet(
-            "font-size: 28px; font-weight: bold; color: #e94560; padding: 10px;"
-        )
+        self._mouse_score_label.setObjectName("score-value")
         self._mouse_score_label.setAlignment(Qt.AlignCenter)
         mouse_layout.addWidget(self._mouse_score_label)
 
@@ -92,16 +90,14 @@ class ValidationScreen(QWidget):
 
         mouse_layout.addWidget(QLabel("Actions validated:"))
         self._mouse_count_label = QLabel("0")
-        self._mouse_count_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self._mouse_count_label.setObjectName("count-value")
         mouse_layout.addWidget(self._mouse_count_label)
 
         mouse_layout.addWidget(QLabel("Recent:"))
         self._mouse_log = QTextEdit()
         self._mouse_log.setReadOnly(True)
         self._mouse_log.setMaximumHeight(200)
-        self._mouse_log.setStyleSheet(
-            "background-color: #16213e; color: #aaa; font-family: Consolas; font-size: 12px;"
-        )
+        self._mouse_log.setObjectName("log-area")
         mouse_layout.addWidget(self._mouse_log)
 
         mouse_layout.addStretch()
@@ -112,9 +108,7 @@ class ValidationScreen(QWidget):
         kb_layout = QVBoxLayout(kb_group)
 
         self._kb_score_label = QLabel("Overall: —")
-        self._kb_score_label.setStyleSheet(
-            "font-size: 28px; font-weight: bold; color: #e94560; padding: 10px;"
-        )
+        self._kb_score_label.setObjectName("score-value")
         self._kb_score_label.setAlignment(Qt.AlignCenter)
         kb_layout.addWidget(self._kb_score_label)
 
@@ -125,16 +119,14 @@ class ValidationScreen(QWidget):
 
         kb_layout.addWidget(QLabel("Transitions validated:"))
         self._kb_count_label = QLabel("0")
-        self._kb_count_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self._kb_count_label.setObjectName("count-value")
         kb_layout.addWidget(self._kb_count_label)
 
         kb_layout.addWidget(QLabel("Recent:"))
         self._kb_log = QTextEdit()
         self._kb_log.setReadOnly(True)
         self._kb_log.setMaximumHeight(200)
-        self._kb_log.setStyleSheet(
-            "background-color: #16213e; color: #aaa; font-family: Consolas; font-size: 12px;"
-        )
+        self._kb_log.setObjectName("log-area")
         kb_layout.addWidget(self._kb_log)
 
         kb_layout.addStretch()

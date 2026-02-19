@@ -86,8 +86,12 @@ Stored in `global_settings` table in `profiles.db`. Loaded at app start before l
 
 | Setting | Control | Default |
 |---------|---------|---------|
+| Theme | Dropdown: Dark / Light / Windows | Dark |
 | Data location | Browse/Reset | `data/db/` |
 | Start with Windows | Checkbox | Off |
+
+Theme changes apply immediately (live switching) without restart.
+The "Windows" option follows the system theme (light/dark) detected from the registry.
 
 ### Screen 3: Per-User Settings
 
@@ -133,9 +137,10 @@ Functions: `save_global()`, `save_globals()`, `load_globals()`,
 ### `global_settings_dialog.py` — Global Settings Dialog
 
 QDialog opened from the login screen's Settings button. Contains
-data location (Browse/Reset) and Start with Windows checkbox.
-Also contains Windows registry autostart functions (moved from
-`settings_screen.py`).
+theme selector (Dark/Light/Windows), data location (Browse/Reset),
+and Start with Windows checkbox. Theme changes apply live via
+`QApplication.instance().setStyleSheet()`. Also contains Windows
+registry autostart functions.
 
 ### `login_screen.py` — Login / Register Page
 
@@ -176,11 +181,25 @@ Global settings (data location, autostart) are NOT here — they are in
 Split view: mouse validation on left, keyboard validation on right.
 Shows real-time comparison scores during validation session.
 
-### `styles.py` — Shared QSS Stylesheet
+### `styles.py` — Theme System
 
-Consistent dark theme for the application. Covers all widget types:
-buttons, inputs, combos, sliders, spinboxes, checkboxes, tabs,
-group boxes, progress bars, and key sequence editors.
+Palette-based theme system with dark and light themes. Colors are
+extracted from the InputDNA SVG brand logos (`support/logo/dark/` and
+`support/logo/light/UV-InputDNA.svg`).
+
+**Architecture:**
+- `DARK_PALETTE` / `LIGHT_PALETTE` — dicts mapping color roles to hex values
+- `_QSS_TEMPLATE` — `string.Template` with `$variable` references
+- `DARK_STYLE` / `LIGHT_STYLE` — pre-built QSS strings
+- `get_stylesheet(theme)` — returns QSS for "dark", "light", or "auto"
+
+**Object name selectors** (used by other GUI files instead of inline styles):
+`#stat-value`, `#info-value`, `#hint`, `#hint-small`, `#hint-dim`,
+`#result-value`, `#result-value-large`, `#score-value`, `#count-value`,
+`#log-area`, `#drag-area`.
+
+All widget types covered: buttons, inputs, combos, sliders, spinboxes,
+checkboxes, tabs, group boxes, progress bars, calendar, and key sequence editors.
 
 ### `user_db.py` — User Profile Database
 

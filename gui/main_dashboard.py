@@ -119,17 +119,17 @@ class MainDashboard(QWidget):
 
         stats_layout.addWidget(QLabel("Movements:"), 0, 0)
         self._movements_label = QLabel("0")
-        self._movements_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #e94560;")
+        self._movements_label.setObjectName("stat-value")
         stats_layout.addWidget(self._movements_label, 0, 1)
 
         stats_layout.addWidget(QLabel("Clicks:"), 0, 2)
         self._clicks_label = QLabel("0")
-        self._clicks_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #e94560;")
+        self._clicks_label.setObjectName("stat-value")
         stats_layout.addWidget(self._clicks_label, 0, 3)
 
         stats_layout.addWidget(QLabel("Keystrokes:"), 0, 4)
         self._keystrokes_label = QLabel("0")
-        self._keystrokes_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #e94560;")
+        self._keystrokes_label.setObjectName("stat-value")
         stats_layout.addWidget(self._keystrokes_label, 0, 5)
 
         layout.addWidget(stats_group)
@@ -139,31 +139,29 @@ class MainDashboard(QWidget):
         sys_layout = QGridLayout(sys_group)
         sys_layout.setSpacing(10)
 
-        info_style = "font-size: 13px; font-weight: bold; color: #e94560;"
-
         sys_layout.addWidget(QLabel("Keyboard Layout:"), 0, 0)
         self._layout_label = QLabel("—")
-        self._layout_label.setStyleSheet(info_style)
+        self._layout_label.setObjectName("info-value")
         sys_layout.addWidget(self._layout_label, 0, 1)
 
         sys_layout.addWidget(QLabel("Polling Rate:"), 0, 2)
         self._polling_label = QLabel("—")
-        self._polling_label.setStyleSheet(info_style)
+        self._polling_label.setObjectName("info-value")
         sys_layout.addWidget(self._polling_label, 0, 3)
 
         sys_layout.addWidget(QLabel("Mouse Speed:"), 1, 0)
         self._mouse_speed_label = QLabel("—")
-        self._mouse_speed_label.setStyleSheet(info_style)
+        self._mouse_speed_label.setObjectName("info-value")
         sys_layout.addWidget(self._mouse_speed_label, 1, 1)
 
         sys_layout.addWidget(QLabel("Acceleration:"), 1, 2)
         self._accel_label = QLabel("—")
-        self._accel_label.setStyleSheet(info_style)
+        self._accel_label.setObjectName("info-value")
         sys_layout.addWidget(self._accel_label, 1, 3)
 
         sys_layout.addWidget(QLabel("Resolution:"), 2, 0)
         self._resolution_label = QLabel("—")
-        self._resolution_label.setStyleSheet(info_style)
+        self._resolution_label.setObjectName("info-value")
         sys_layout.addWidget(self._resolution_label, 2, 1)
 
         layout.addWidget(sys_group)

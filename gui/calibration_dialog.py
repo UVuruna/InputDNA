@@ -49,14 +49,14 @@ class ClickCalibrationDialog(QDialog):
             f"{self._target_clicks} times."
         )
         instructions.setAlignment(Qt.AlignCenter)
-        instructions.setStyleSheet("font-size: 14px; color: #aaa;")
+        instructions.setObjectName("hint")
         layout.addWidget(instructions)
 
         # System reference
         sys_dct = get_system_double_click_time()
         ref = QLabel(f"Windows double-click setting: {sys_dct} ms")
         ref.setAlignment(Qt.AlignCenter)
-        ref.setStyleSheet("font-size: 12px; color: #666;")
+        ref.setObjectName("hint-dim")
         layout.addWidget(ref)
 
         layout.addSpacing(10)
@@ -65,9 +65,7 @@ class ClickCalibrationDialog(QDialog):
         self._click_btn = QPushButton("CLICK HERE")
         self._click_btn.setObjectName("primary")
         self._click_btn.setMinimumHeight(80)
-        self._click_btn.setStyleSheet(
-            "QPushButton { font-size: 20px; font-weight: bold; }"
-        )
+        self._click_btn.setStyleSheet("font-size: 20px; font-weight: bold;")
         self._click_btn.clicked.connect(self._on_click)
         layout.addWidget(self._click_btn)
 
@@ -87,12 +85,12 @@ class ClickCalibrationDialog(QDialog):
 
         self._result_label = QLabel("")
         self._result_label.setAlignment(Qt.AlignCenter)
-        self._result_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #e94560;")
+        self._result_label.setObjectName("result-value")
         results_layout.addWidget(self._result_label)
 
         self._detail_label = QLabel("")
         self._detail_label.setAlignment(Qt.AlignCenter)
-        self._detail_label.setStyleSheet("font-size: 12px; color: #aaa;")
+        self._detail_label.setObjectName("hint-dim")
         results_layout.addWidget(self._detail_label)
 
         btn_row = QHBoxLayout()

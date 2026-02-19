@@ -45,7 +45,7 @@ from gui.settings_screen import SettingsScreen
 from gui.validation_screen import ValidationScreen
 from gui.calibration_dialog import ClickCalibrationDialog
 from gui.dpi_dialog import DpiMeasurementDialog
-from gui.styles import DARK_STYLE
+from gui.styles import get_stylesheet
 from gui.user_db import UserProfile
 from gui.user_settings import load_settings
 from gui.global_settings import load_globals
@@ -496,12 +496,15 @@ def _apply_global_settings():
         "system.start_with_windows", ""
     ).lower() == "true"
 
+    # Apply theme
+    theme = settings.get("appearance.theme", "dark")
+    QApplication.instance().setStyleSheet(get_stylesheet(theme))
+
 
 def main():
     app = QApplication(sys.argv)
-    app.setStyleSheet(DARK_STYLE)
 
-    # Load global settings (data location, autostart) before anything else
+    # Load global settings (theme, data location, autostart) before anything else
     _apply_global_settings()
 
     # Set application icon (title bar + taskbar) — theme-aware SVG

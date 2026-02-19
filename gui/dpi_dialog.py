@@ -172,9 +172,7 @@ class _MeasurementArea(QLabel):
         self._distance_spin = distance_spin
         self._dragging = False
         self.setMinimumHeight(120)
-        self.setStyleSheet(
-            "background-color: #16213e; border: 1px solid #0f3460; border-radius: 6px;"
-        )
+        self.setObjectName("drag-area")
         self.setAlignment(Qt.AlignCenter)
         self.setMouseTracking(True)
         self.setText("Press and drag horizontally across your reference distance")
@@ -282,7 +280,7 @@ class DpiMeasurementDialog(QDialog):
         )
         instructions.setAlignment(Qt.AlignCenter)
         instructions.setWordWrap(True)
-        instructions.setStyleSheet("font-size: 13px; color: #aaa;")
+        instructions.setObjectName("hint-small")
         layout.addWidget(instructions)
 
         # Distance input
@@ -313,12 +311,12 @@ class DpiMeasurementDialog(QDialog):
 
         self._result_label = QLabel("")
         self._result_label.setAlignment(Qt.AlignCenter)
-        self._result_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #e94560;")
+        self._result_label.setObjectName("result-value-large")
         results_layout.addWidget(self._result_label)
 
         self._detail_label = QLabel("")
         self._detail_label.setAlignment(Qt.AlignCenter)
-        self._detail_label.setStyleSheet("font-size: 12px; color: #aaa;")
+        self._detail_label.setObjectName("hint-dim")
         results_layout.addWidget(self._detail_label)
 
         btn_row = QHBoxLayout()
