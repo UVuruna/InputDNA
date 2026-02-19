@@ -160,11 +160,9 @@ SYSTEM_MONITOR_INTERVAL_S = 10.0
 # Number of mouse move events to sample for polling rate estimation.
 POLLING_RATE_SAMPLE_COUNT = 500
 
-# ─────────────────────────────────────────────────────────────
-# HOTKEY
-# ─────────────────────────────────────────────────────────────
-# Global hotkey to pause/resume recording.
-HOTKEY_TOGGLE = "<ctrl>+<alt>+r"
+# Seconds of no mouse/keyboard input before tray icon shows idle state.
+# Purely cosmetic — recorder still runs, just visual feedback.
+IDLE_ICON_TIMEOUT_S = 60
 
 # ─────────────────────────────────────────────────────────────
 # CALIBRATION
@@ -197,7 +195,6 @@ _SETTING_MAP: dict[str, tuple[str, type]] = {
     "recording.session_end_timeout_ms": ("SESSION_END_TIMEOUT_MS", int),
     "recording.min_session_distance_px":("MIN_SESSION_DISTANCE_PX", int),
     "recording.db_rotation_max_bytes":  ("DB_ROTATION_MAX_BYTES", int),
-    "recording.hotkey_toggle":          ("HOTKEY_TOGGLE", str),
     "recording.click_sequence_gap_ms":  ("CLICK_SEQUENCE_GAP_MS", int),
     "system.dpi":                       ("USER_DPI", int),
 }

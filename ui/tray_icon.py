@@ -1,13 +1,16 @@
 """
-System tray icon for recording status.
+System tray icon for application status.
 
-Shows custom InputDNA logos in the taskbar notification area.
-Icons are loaded from light/ or dark/ subfolder based on Windows theme:
-  {theme}/InputDNA-start.png  = recording
-  {theme}/InputDNA-pause.png  = paused
-  {theme}/InputDNA-stop.png   = stopped / error
+Always visible while the app is running (after login). Shows custom
+InputDNA logos in the taskbar notification area, loaded from light/
+or dark/ subfolder based on the current Windows theme.
 
-Right-click menu: Pause/Resume, Stats, Quit.
+Icon states:
+  {theme}/InputDNA-start.png  = actively recording
+  {theme}/InputDNA-pause.png  = recording but input idle
+  {theme}/InputDNA-stop.png   = not recording
+
+Right-click menu: Stop Recording (during recording), Stats, Quit.
 
 pystray requires the icon to run on the main thread on some
 platforms, so TrayIcon.run() is a blocking call.
@@ -50,7 +53,7 @@ def _load_themed_icons() -> dict[str, Image.Image]:
     logger.info(f"Loading tray icons from ui/{theme}/")
     return {
         "recording": Image.open(theme_dir / "InputDNA-start.png"),
-        "paused": Image.open(theme_dir / "InputDNA-pause.png"),
+        "idle": Image.open(theme_dir / "InputDNA-pause.png"),
         "stopped": Image.open(theme_dir / "InputDNA-stop.png"),
     }
 
@@ -63,31 +66,34 @@ class TrayIcon:
     """
     System tray icon with status and controls.
 
+    Always visible after login. Starts in stopped (red) state.
+
     Usage:
         tray = TrayIcon(
-            on_toggle_pause=my_toggle_fn,
+            on_stop_recording=my_stop_fn,
             on_quit=my_quit_fn,
             get_stats=my_stats_fn,
         )
-        tray.run()  # Blocks main thread
+        tray.run()  # Blocks
     """
 
     def __init__(self,
-                 on_toggle_pause: Callable[[], None],
+                 on_stop_recording: Callable[[], None],
                  on_quit: Callable[[], None],
                  get_stats: Optional[Callable[[], str]] = None):
-        self._on_toggle_pause = on_toggle_pause
+        self._on_stop_recording = on_stop_recording
         self._on_quit = on_quit
         self._get_stats = get_stats
-        self._paused = False
+        self._recording = False
         self._icon: Optional[pystray.Icon] = None
 
     def run(self):
-        """Start the tray icon. Blocks until quit."""
+        """Start the tray icon in stopped state. Blocks until quit."""
         menu = pystray.Menu(
             pystray.MenuItem(
-                text=lambda _: "Resume" if self._paused else "Pause",
-                action=self._toggle,
+                text="Stop Recording",
+                action=self._stop_recording,
+                visible=lambda _: self._recording,
             ),
             pystray.MenuItem(
                 text="Stats",
@@ -101,37 +107,39 @@ class TrayIcon:
         )
 
         self._icon = pystray.Icon(
-            name="InputRecorder",
-            icon=_icons["recording"],
-            title="Input Recorder — Recording",
+            name="InputDNA",
+            icon=_icons["stopped"],
+            title="InputDNA — Not Recording",
             menu=menu,
         )
 
         logger.info("System tray icon started")
         self._icon.run()  # Blocks
 
-    def set_paused(self, paused: bool):
-        """Update icon to reflect pause state."""
-        self._paused = paused
+    def set_recording(self):
+        """Set icon to recording (green) state."""
+        self._recording = True
         if self._icon is not None:
-            if paused:
-                self._icon.icon = _icons["paused"]
-                self._icon.title = "Input Recorder — Paused"
-            else:
-                self._icon.icon = _icons["recording"]
-                self._icon.title = "Input Recorder — Recording"
+            self._icon.icon = _icons["recording"]
+            self._icon.title = "InputDNA — Recording"
+
+    def set_idle(self):
+        """Set icon to idle (yellow) state — recording but no input activity."""
+        if self._icon is not None:
+            self._icon.icon = _icons["idle"]
+            self._icon.title = "InputDNA — Recording (Idle)"
 
     def set_stopped(self):
-        """Update icon to stopped state."""
+        """Set icon to stopped (red) state — not recording."""
+        self._recording = False
         if self._icon is not None:
             self._icon.icon = _icons["stopped"]
-            self._icon.title = "Input Recorder — Stopped"
+            self._icon.title = "InputDNA — Not Recording"
 
-    def _toggle(self, icon, item):
-        """Menu: Pause/Resume clicked."""
-        self._paused = not self._paused
-        self._on_toggle_pause()
-        self.set_paused(self._paused)
+    def _stop_recording(self, icon, item):
+        """Menu: Stop Recording clicked."""
+        logger.info("Stop recording requested from tray")
+        self._on_stop_recording()
 
     def _show_stats(self, icon, item):
         """Menu: Stats clicked — show notification with counts."""
@@ -140,12 +148,10 @@ class TrayIcon:
         else:
             stats = "No stats available"
 
-        # pystray notification (Windows toast)
         if self._icon is not None:
             try:
-                self._icon.notify(stats, "Input Recorder Stats")
+                self._icon.notify(stats, "InputDNA Stats")
             except Exception:
-                # notify not supported on all platforms
                 logger.info(f"Stats: {stats}")
 
     def stop(self):
@@ -155,8 +161,6 @@ class TrayIcon:
             self._icon = None
 
     def _quit(self, icon, item):
-        """Menu: Quit clicked."""
+        """Menu: Quit clicked — close entire app."""
         logger.info("Quit requested from tray")
-        if self._icon is not None:
-            self._icon.stop()
         self._on_quit()

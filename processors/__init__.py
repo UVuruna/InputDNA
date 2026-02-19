@@ -71,6 +71,9 @@ class EventProcessor:
         self.click_count = 0
         self.keystroke_count = 0
 
+        # Last event timestamp for idle detection (cosmetic tray icon)
+        self._last_event_ns: int = 0
+
     def start(self):
         """Start processor thread."""
         self._running = True
@@ -107,8 +110,15 @@ class EventProcessor:
             self._mouse_session.check_idle_timeout(t)
             self._click_proc.check_sequence_timeout(t)
 
+    @property
+    def last_event_ns(self) -> int:
+        """Timestamp of the most recent event (for idle detection)."""
+        return self._last_event_ns
+
     def _dispatch(self, event):
         """Route raw event to appropriate sub-processor."""
+        self._last_event_ns = event.t_ns
+
         if isinstance(event, RawMouseMove):
             # Feed polling rate estimator
             if self._polling_estimator is not None:

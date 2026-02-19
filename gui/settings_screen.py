@@ -11,7 +11,7 @@ import logging
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QGridLayout, QComboBox, QSlider, QSpinBox,
-    QKeySequenceEdit, QMessageBox, QScrollArea,
+    QMessageBox, QScrollArea,
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -119,12 +119,6 @@ class SettingsScreen(QWidget):
         rec_layout.addWidget(self._db_size_combo, row, 1)
         row += 1
 
-        # Hotkey
-        rec_layout.addWidget(QLabel("Pause hotkey:"), row, 0)
-        self._hotkey_edit = QKeySequenceEdit()
-        rec_layout.addWidget(self._hotkey_edit, row, 1)
-        row += 1
-
         layout.addWidget(rec_group)
 
         # ── System Settings ───────────────────────────────────
@@ -207,9 +201,6 @@ class SettingsScreen(QWidget):
             if idx >= 0:
                 self._db_size_combo.setCurrentIndex(idx)
 
-        # Hotkey — display current value as label (QKeySequenceEdit can't parse pynput format)
-        self._hotkey_edit.setToolTip(f"Current: {config.HOTKEY_TOGGLE}")
-
         # DPI
         self._dpi_spin.setValue(config.USER_DPI)
 
@@ -240,13 +231,6 @@ class SettingsScreen(QWidget):
         settings["recording.db_rotation_max_bytes"] = str(
             self._db_size_combo.currentData()
         )
-
-        # Hotkey — only save if user entered something
-        seq = self._hotkey_edit.keySequence()
-        if not seq.isEmpty():
-            hotkey_str = _qt_keysequence_to_pynput(seq.toString())
-            if hotkey_str:
-                settings["recording.hotkey_toggle"] = hotkey_str
 
         # System settings
         settings["system.dpi"] = str(self._dpi_spin.value())
@@ -281,29 +265,3 @@ class SettingsScreen(QWidget):
         """Called externally after click calibration dialog."""
         config.CLICK_SEQUENCE_GAP_MS = gap_ms
         self._update_click_gap_display()
-
-
-def _qt_keysequence_to_pynput(qt_str: str) -> str:
-    """
-    Convert Qt key sequence string to pynput hotkey format.
-
-    Qt: "Ctrl+Alt+R"  →  pynput: "<ctrl>+<alt>+r"
-    """
-    if not qt_str:
-        return ""
-
-    parts = qt_str.split("+")
-    result = []
-    for part in parts:
-        part = part.strip().lower()
-        if part in ("ctrl", "control"):
-            result.append("<ctrl>")
-        elif part in ("alt",):
-            result.append("<alt>")
-        elif part in ("shift",):
-            result.append("<shift>")
-        elif part in ("meta", "win"):
-            result.append("<cmd>")
-        else:
-            result.append(part)
-    return "+".join(result)

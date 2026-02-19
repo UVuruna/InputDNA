@@ -12,7 +12,7 @@ Thread architecture (during recording):
     Thread 2: keyboard listener (pynput hook)
     Thread 3: event processor (dispatches events)
     Thread 4: database writer (batched inserts)
-    Thread 5: tray icon (pystray, optional visual feedback)
+    Thread 5: tray icon (pystray, always visible after login)
 """
 
 import sys
@@ -35,8 +35,7 @@ from listeners.keyboard_listener import KeyboardListener
 from processors import EventProcessor
 from models.sessions import RecordingSessionRecord
 from utils.timing import now_ns, wall_clock_iso
-from utils.hotkeys import register_toggle_hotkey
-from utils.system_monitor import SystemMonitor, PollingRateEstimator
+from utils.system_monitor import SystemMonitor, PollingRateEstimator, get_all_state
 from ui.tray_icon import TrayIcon
 from gui.login_screen import LoginScreen
 from gui.main_dashboard import MainDashboard
@@ -76,7 +75,6 @@ class Recorder:
         self._processor: EventProcessor | None = None
         self._recording_session: RecordingSessionRecord | None = None
         self._session_id: int = 0
-        self._paused = False
         self._polling_estimator = PollingRateEstimator()
 
     def start(self):
@@ -130,9 +128,6 @@ class Recorder:
         )
         self._processor.start()
 
-        # Register hotkey
-        register_toggle_hotkey(self.toggle_pause)
-
         logger.info("All recording threads running.")
 
     def stop(self):
@@ -170,26 +165,6 @@ class Recorder:
                 f"  DB writes: {self._db_writer.total_written if self._db_writer else 0}"
             )
 
-    def toggle_pause(self):
-        """Toggle pause/resume for all listeners."""
-        self._paused = not self._paused
-        if self._paused:
-            logger.info("Recording PAUSED")
-            if self._mouse_listener:
-                self._mouse_listener.pause()
-            if self._kb_listener:
-                self._kb_listener.pause()
-        else:
-            logger.info("Recording RESUMED")
-            if self._mouse_listener:
-                self._mouse_listener.resume()
-            if self._kb_listener:
-                self._kb_listener.resume()
-
-    @property
-    def paused(self) -> bool:
-        return self._paused
-
     @property
     def movement_count(self) -> int:
         return self._processor.movement_count if self._processor else 0
@@ -205,6 +180,10 @@ class Recorder:
     @property
     def pending_writes(self) -> int:
         return self._db_writer.pending if self._db_writer else 0
+
+    @property
+    def last_event_ns(self) -> int:
+        return self._processor.last_event_ns if self._processor else 0
 
     @property
     def estimated_polling_hz(self) -> int | None:
@@ -270,6 +249,12 @@ class MainWindow(QMainWindow):
         # Create screens that need user context
         self._create_user_screens(profile)
 
+        # Populate system info immediately (before recording starts)
+        self._dashboard.update_system_info(get_all_state())
+
+        # Start tray icon (visible for entire logged-in session)
+        self._start_tray()
+
         self._stack.setCurrentIndex(self._DASHBOARD)
 
     def _create_user_screens(self, profile: UserProfile):
@@ -302,9 +287,11 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._validation)
 
     def _on_logout(self):
-        """Stop recording if active, reset config, go back to login."""
+        """Stop recording if active, remove tray, reset config, go back to login."""
         if self._recorder:
             self._stop_recording()
+
+        self._stop_tray()
 
         config.reset_to_defaults()
         config.clear_active_user()
@@ -334,8 +321,9 @@ class MainWindow(QMainWindow):
         self._recorder = Recorder(self._user)
         self._recorder.start()
 
-        # Start tray icon in background thread
-        self._start_tray()
+        # Update tray icon to recording state
+        if self._tray:
+            self._tray.set_recording()
 
         # Start stats update timer
         self._stats_timer.start(1000)
@@ -346,21 +334,24 @@ class MainWindow(QMainWindow):
         logger.info("Recording started from dashboard")
 
     def _stop_recording(self):
-        """Stop recorder and tray icon."""
+        """Stop recorder, update tray to stopped state."""
         if not self._recorder:
             return
 
         self._stats_timer.stop()
         self._stop_system_monitor()
-        self._stop_tray()
 
         self._recorder.stop()
         self._recorder = None
 
+        # Update tray icon to stopped state (tray stays visible)
+        if self._tray:
+            self._tray.set_stopped()
+
         logger.info("Recording stopped from dashboard")
 
     def _update_stats(self):
-        """Update dashboard stats and system info from recorder (runs on timer)."""
+        """Update dashboard stats, system info, and tray idle state (runs on timer)."""
         if self._recorder and self._dashboard:
             self._dashboard.update_stats(
                 self._recorder.movement_count,
@@ -374,13 +365,24 @@ class MainWindow(QMainWindow):
                     self._recorder.estimated_polling_hz,
                 )
 
+            # Idle detection — cosmetic tray icon update
+            if self._tray:
+                last_ns = self._recorder.last_event_ns
+                idle_ns = config.IDLE_ICON_TIMEOUT_S * 1_000_000_000
+                if last_ns and (now_ns() - last_ns) > idle_ns:
+                    self._tray.set_idle()
+                else:
+                    self._tray.set_recording()
+
     # ── Tray icon ──────────────────────────────────────────────
 
     def _start_tray(self):
-        """Start system tray icon in a background thread."""
+        """Start system tray icon in a background thread (visible until logout)."""
+        if self._tray:
+            return
         self._tray = TrayIcon(
-            on_toggle_pause=self._tray_toggle_pause,
-            on_quit=self._tray_quit,
+            on_stop_recording=self._tray_stop_recording,
+            on_quit=self._tray_quit_app,
             get_stats=self._get_stats_text,
         )
         self._tray_thread = threading.Thread(
@@ -391,23 +393,19 @@ class MainWindow(QMainWindow):
         self._tray_thread.start()
 
     def _stop_tray(self):
-        """Stop the tray icon."""
+        """Remove the tray icon (on logout or app close)."""
         if self._tray:
             self._tray.stop()
             self._tray = None
             self._tray_thread = None
 
-    def _tray_toggle_pause(self):
-        """Called from tray icon thread — toggle recording pause."""
-        if self._recorder:
-            self._recorder.toggle_pause()
-            if self._tray:
-                self._tray.set_paused(self._recorder.paused)
-
-    def _tray_quit(self):
-        """Called from tray icon thread — stop recording via tray."""
-        # Schedule stop on the main Qt thread
+    def _tray_stop_recording(self):
+        """Called from tray thread — stop recording."""
         QTimer.singleShot(0, self._stop_recording_from_tray)
+
+    def _tray_quit_app(self):
+        """Called from tray thread — close entire application."""
+        QTimer.singleShot(0, self.close)
 
     def _stop_recording_from_tray(self):
         """Stop recording and update dashboard (runs on Qt thread)."""
@@ -476,6 +474,7 @@ class MainWindow(QMainWindow):
 
         if self._recorder:
             self._stop_recording()
+        self._stop_tray()
         event.accept()
 
 

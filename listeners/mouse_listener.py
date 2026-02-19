@@ -40,7 +40,6 @@ class MouseListener:
     def __init__(self, event_queue: queue.Queue):
         self._queue = event_queue
         self._listener: mouse.Listener | None = None
-        self._paused = False
 
     def start(self):
         """Start listening for mouse events in a background thread."""
@@ -59,28 +58,10 @@ class MouseListener:
             self._listener.stop()
             logger.info("Mouse listener stopped")
 
-    def pause(self):
-        """Pause event capture (events are ignored, not queued)."""
-        self._paused = True
-        logger.info("Mouse listener paused")
-
-    def resume(self):
-        """Resume event capture."""
-        self._paused = False
-        logger.info("Mouse listener resumed")
-
-    @property
-    def is_paused(self) -> bool:
-        return self._paused
-
     def _on_move(self, x: int, y: int):
-        if self._paused:
-            return
         self._queue.put(RawMouseMove(x=int(x), y=int(y), t_ns=now_ns()))
 
     def _on_click(self, x: int, y: int, button, pressed: bool):
-        if self._paused:
-            return
         btn = _BUTTON_MAP.get(button)
         if btn is None:
             return  # Unknown button (e.g. side buttons), skip
@@ -89,8 +70,6 @@ class MouseListener:
         ))
 
     def _on_scroll(self, x: int, y: int, dx: int, dy: int):
-        if self._paused:
-            return
         self._queue.put(RawMouseScroll(
             x=int(x), y=int(y), dx=dx, dy=dy, t_ns=now_ns()
         ))

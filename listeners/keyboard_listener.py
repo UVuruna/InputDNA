@@ -134,7 +134,6 @@ class KeyboardListener:
     def __init__(self, event_queue: queue.Queue):
         self._queue = event_queue
         self._listener: keyboard.Listener | None = None
-        self._paused = False
 
         # Modifier state tracking
         self._modifier_state = {
@@ -164,31 +163,12 @@ class KeyboardListener:
             self._listener.stop()
             logger.info("Keyboard listener stopped")
 
-    def pause(self):
-        """Pause event capture."""
-        self._paused = True
-        self._press_times.clear()
-        self._modifier_state = {k: False for k in self._modifier_state}
-        logger.info("Keyboard listener paused")
-
-    def resume(self):
-        """Resume event capture."""
-        self._paused = False
-        logger.info("Keyboard listener resumed")
-
-    @property
-    def is_paused(self) -> bool:
-        return self._paused
-
     @property
     def modifier_state(self) -> dict:
         """Current modifier key state (read-only copy)."""
         return self._modifier_state.copy()
 
     def _on_press(self, key):
-        if self._paused:
-            return
-
         t = now_ns()
         vk, scan, name = _get_key_info(key)
 
@@ -214,9 +194,6 @@ class KeyboardListener:
         ))
 
     def _on_release(self, key):
-        if self._paused:
-            return
-
         t = now_ns()
         vk, scan, name = _get_key_info(key)
 
