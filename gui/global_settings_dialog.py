@@ -10,7 +10,8 @@ Contains settings that are NOT per-user:
 """
 
 import logging
-import winreg
+import subprocess
+import sys
 
 from PySide6.QtWidgets import (
     QApplication,
@@ -27,90 +28,97 @@ from gui.styles import get_stylesheet
 
 logger = logging.getLogger(__name__)
 
-# Registry key for Windows autostart
-_AUTOSTART_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_AUTOSTART_NAME = "InputDNA"
+_TASK_NAME = "InputDNA"
 
 
 def _is_autostart_enabled() -> bool:
-    """Check if InputDNA is set to start with Windows.
+    """Check if InputDNA scheduled task exists and is enabled.
 
-    Checks both the Run key (command exists) and StartupApproved key
-    (not disabled by Task Manager / Windows Settings).
+    Uses Task Scheduler instead of registry Run key because the exe
+    requires admin elevation (--uac-admin), and Windows silently skips
+    elevated apps from the registry Run key at boot.
+    Task Scheduler with /rl highest launches elevated apps without UAC prompt.
     """
-    # Check Run key exists
     try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_READ)
-        winreg.QueryValueEx(key, _AUTOSTART_NAME)
-        winreg.CloseKey(key)
-    except (FileNotFoundError, OSError):
-        return False
-
-    # Check StartupApproved — if entry exists and first byte is 0x03, it's disabled
-    _STARTUP_APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
-    try:
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER, _STARTUP_APPROVED_KEY, 0, winreg.KEY_READ,
+        result = subprocess.run(
+            ["schtasks", "/query", "/tn", _TASK_NAME, "/fo", "CSV", "/nh"],
+            capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW,
         )
-        value, _ = winreg.QueryValueEx(key, _AUTOSTART_NAME)
-        winreg.CloseKey(key)
-        if value[0] == 3:  # 0x03 = disabled by user via Task Manager
+        if result.returncode != 0:
             return False
-    except (FileNotFoundError, OSError):
-        pass  # No approved entry — treat as enabled (will be created on save)
-
-    return True
+        # CSV output: "TaskName","Next Run Time","Status"
+        # Status = Ready means enabled, Disabled means disabled
+        return "Disabled" not in result.stdout
+    except OSError as e:
+        logger.error(f"Failed to query scheduled task: {e}")
+        return False
 
 
 def _set_autostart(enabled: bool) -> None:
-    """Enable or disable Windows autostart for InputDNA.
+    """Enable or disable Windows autostart via Task Scheduler.
 
-    Writes to both registry keys:
-    - HKCU\\...\\Run — the command to execute
-    - HKCU\\...\\StartupApproved\\Run — enabled/disabled flag (required by Windows 11)
-
-    Adds --autostart flag so the app knows it was launched at boot
-    (auto-login default user, auto-record, stay in tray).
+    Uses schtasks with /rl highest to launch the elevated exe at logon
+    without a UAC prompt. Registry Run key does NOT work for elevated apps
+    because Windows silently skips them at boot.
     """
-    import struct
-    import sys
-    if getattr(sys, 'frozen', False):
-        exe_path = f'"{sys.executable}" --autostart'
+    if enabled:
+        if getattr(sys, 'frozen', False):
+            exe_path = sys.executable
+        else:
+            exe_path = __file__
+        try:
+            subprocess.run(
+                [
+                    "schtasks", "/create",
+                    "/tn", _TASK_NAME,
+                    "/tr", f'"{exe_path}" --autostart',
+                    "/sc", "onlogon",
+                    "/rl", "highest",
+                    "/f",
+                ],
+                capture_output=True, text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                check=True,
+            )
+            logger.info("Autostart scheduled task created")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to create autostart task: {e.stderr}")
+        except OSError as e:
+            logger.error(f"Failed to run schtasks: {e}")
     else:
-        # Dev mode — not used for real autostart, user installs the app
-        exe_path = f'"{sys.executable}" "{__file__}"'
-    try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE)
-        if enabled:
-            winreg.SetValueEx(key, _AUTOSTART_NAME, 0, winreg.REG_SZ, exe_path)
-        else:
-            try:
-                winreg.DeleteValue(key, _AUTOSTART_NAME)
-            except FileNotFoundError:
-                pass
-        winreg.CloseKey(key)
-    except OSError as e:
-        logger.error(f"Failed to set autostart in Run key: {e}")
-        return
+        try:
+            subprocess.run(
+                ["schtasks", "/delete", "/tn", _TASK_NAME, "/f"],
+                capture_output=True, text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            logger.info("Autostart scheduled task removed")
+        except OSError as e:
+            logger.error(f"Failed to delete autostart task: {e}")
 
-    # Windows 11 requires StartupApproved\\Run entry to actually launch the app
-    _STARTUP_APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
-    try:
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER, _STARTUP_APPROVED_KEY, 0, winreg.KEY_SET_VALUE,
-        )
-        if enabled:
-            # 0x02 = enabled, followed by 8 zero bytes (timestamp not needed for user entries)
-            approved_value = struct.pack("<3I", 2, 0, 0)
-            winreg.SetValueEx(key, _AUTOSTART_NAME, 0, winreg.REG_BINARY, approved_value)
-        else:
-            try:
-                winreg.DeleteValue(key, _AUTOSTART_NAME)
-            except FileNotFoundError:
-                pass
-        winreg.CloseKey(key)
-    except OSError as e:
-        logger.error(f"Failed to set StartupApproved: {e}")
+    _cleanup_registry_autostart()
+
+
+def _cleanup_registry_autostart() -> None:
+    """Remove old registry Run key entries from previous versions.
+
+    Previous versions used HKCU\\...\\Run which doesn't work for elevated apps.
+    Clean up to avoid confusion in Task Manager's Startup apps tab.
+    """
+    import winreg
+    for key_path in (
+        r"Software\Microsoft\Windows\CurrentVersion\Run",
+        r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run",
+    ):
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE,
+            )
+            winreg.DeleteValue(key, _TASK_NAME)
+            winreg.CloseKey(key)
+            logger.info(f"Cleaned up old registry entry: {key_path}\\{_TASK_NAME}")
+        except (FileNotFoundError, OSError):
+            pass
 
 
 class GlobalSettingsDialog(QDialog):

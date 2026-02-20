@@ -110,7 +110,10 @@ Section "Desktop Shortcut" SecDesktop
 SectionEnd
 
 Section "Start with Windows" SecAutostart
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${APP_NAME}" "$\"$INSTDIR\${APP_EXE}$\""
+    ; Use Task Scheduler with highest privileges instead of registry Run key.
+    ; Registry Run silently skips apps that require admin elevation (--uac-admin).
+    ; Task Scheduler /rl highest launches elevated apps without UAC prompt at logon.
+    nsExec::ExecToLog 'schtasks /create /tn "${APP_NAME}" /tr "\"$INSTDIR\${APP_EXE}\" --autostart" /sc onlogon /rl highest /f'
 SectionEnd
 
 ; -- Section Descriptions -----------------------------------------
@@ -125,8 +128,11 @@ SectionEnd
 ; =================================================================
 
 Section "Uninstall"
-    ; Remove autostart registry entry
+    ; Remove autostart scheduled task (replaces old registry Run key approach)
+    nsExec::ExecToLog 'schtasks /delete /tn "${APP_NAME}" /f'
+    ; Clean up old registry entries from previous versions
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${APP_NAME}"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "${APP_NAME}"
 
     ; Remove Windows Defender exclusions
     nsExec::ExecToLog 'powershell -ExecutionPolicy Bypass -Command "Remove-MpPreference -ExclusionPath \"$INSTDIR\""'
