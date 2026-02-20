@@ -23,11 +23,11 @@ DARK_PALETTE = {
     "border":           "#18526f",
     # Brand: Pink (text accents — titles, stats, results)
     "accent":           "#d83a95",
-    "accent_hover":     "#e55aab",
+    "accent_hover":     "#e55aab",   # minor correction (lighter than #d83a95)
     "accent_pressed":   "#862065",
     # Brand: Purple (primary action buttons, checkboxes, selections)
     "primary":          "#6371d7",
-    "primary_hover":    "#7b87e0",
+    "primary_hover":    "#7b87e0",   # minor correction (lighter than #6371d7)
     "primary_pressed":  "#343d80",
     "primary_text":     "#eef7fe",
     # Brand: Cyan (focus rings, progress bars, sliders)
@@ -48,42 +48,42 @@ DARK_PALETTE = {
     "danger":           "#ef4444",
     "danger_hover":     "#f87171",
     # Disabled
-    "disabled_bg":      "#1e2a50",
+    "disabled_bg":      "#1e2a50",   # minor correction (between #0f384d and #082433)
     "disabled_text":    "#3b7b97",
     # Combo arrow / subtle indicators
     "indicator":        "#adcad9",
 }
 
 LIGHT_PALETTE = {
-    # Backgrounds (lightest SVG blues)
+    # Backgrounds (lightest SVG blues → near white)
     "bg":               "#eef7fe",
     "bg_alt":           "#e4f0f8",
-    "bg_button":        "#c5dae6",
-    "bg_hover":         "#adcad9",
-    "bg_pressed":       "#90b6c8",
+    "bg_button":        "#90b6c8",   # darker blue-grey for visible buttons
+    "bg_hover":         "#6e9eb4",   # darker on hover
+    "bg_pressed":       "#47839d",   # darkest on press
     "border":           "#adcad9",
-    # Brand: Pink (text accents)
-    "accent":           "#d83a95",
-    "accent_hover":     "#e55aab",
-    "accent_pressed":   "#862065",
-    # Brand: Purple (primary action buttons)
-    "primary":          "#6371d7",
-    "primary_hover":    "#7b87e0",
-    "primary_pressed":  "#343d80",
+    # Brand: Dark Blue (text accents — titles, stats, results)
+    "accent":           "#004c6f",
+    "accent_hover":     "#0a5aa0",
+    "accent_pressed":   "#031520",
+    # Brand: Dark Purple (primary action buttons, checkboxes, selections)
+    "primary":          "#343d80",
+    "primary_hover":    "#6371d7",
+    "primary_pressed":  "#252c6e",   # minor correction (darker than #343d80)
     "primary_text":     "#eef7fe",
-    # Brand: Cyan/Blue (focus, progress — darker shade for contrast)
-    "highlight":        "#0a5aa0",
-    "highlight_hover":  "#4cc4e4",
+    # Brand: Dark Pink (focus rings, progress bars, sliders)
+    "highlight":        "#862065",
+    "highlight_hover":  "#d83a95",
     # Text (darkest SVG blues)
     "text":             "#031520",
     "text_muted":       "#0f384d",
     "text_dim":         "#47839d",
     "text_disabled":    "#90b6c8",
     # Button text
-    "btn_text":         "#031520",
+    "btn_text":         "#031520",   # dark text on light blue-grey buttons
     "success_text":     "#000000",
     "danger_text":      "#eef7fe",
-    # Status colors (same)
+    # Status colors (standard)
     "success":          "#22c55e",
     "success_hover":    "#4ade80",
     "danger":           "#ef4444",
@@ -99,10 +99,15 @@ LIGHT_PALETTE = {
 # ── QSS template ──────────────────────────────────────────────
 # Uses $variable substitution from the palette dicts above.
 #
-# Color mapping:
-#   $accent*    → Pink  — text accents (titles, stat labels, results)
-#   $primary*   → Purple — primary buttons, checkboxes, calendar selection
-#   $highlight* → Cyan  — focus borders, progress bars, sliders, combo hover
+# Dark palette color mapping:
+#   $accent*    → Pink  (#d83a95) — text accents (titles, stat labels, results)
+#   $primary*   → Purple (#6371d7) — primary buttons, checkboxes, calendar selection
+#   $highlight* → Cyan  (#4cc4e4) — focus borders, progress bars, sliders, combo hover
+#
+# Light palette color mapping:
+#   $accent*    → Dark Blue (#004c6f) — text accents (titles, stat labels, results)
+#   $primary*   → Dark Purple (#343d80) — primary buttons, checkboxes, calendar selection
+#   $highlight* → Dark Pink (#862065) — focus borders, progress bars, sliders, combo hover
 
 _QSS_TEMPLATE = Template("""
 /* ── Base ──────────────────────────────────────────────────── */
