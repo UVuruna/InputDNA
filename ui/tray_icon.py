@@ -25,6 +25,8 @@ from typing import Callable, Optional
 from PIL import Image
 import pystray
 
+from version import __version__
+
 logger = logging.getLogger(__name__)
 
 _UI_DIR = Path(__file__).parent
@@ -123,7 +125,7 @@ class TrayIcon:
         self._icon = pystray.Icon(
             name="InputDNA",
             icon=_icons["default"],
-            title="InputDNA",
+            title=f"InputDNA {__version__}",
             menu=menu,
         )
 
@@ -135,7 +137,7 @@ class TrayIcon:
         self._recording = False
         if self._icon is not None:
             self._icon.icon = _icons["default"]
-            self._icon.title = "InputDNA"
+            self._icon.title = f"InputDNA {__version__}"
             self._icon.update_menu()
 
     def set_recording(self):
@@ -143,21 +145,21 @@ class TrayIcon:
         self._recording = True
         if self._icon is not None:
             self._icon.icon = _icons["recording"]
-            self._icon.title = "InputDNA — Recording"
+            self._icon.title = f"InputDNA {__version__} — Recording"
             self._icon.update_menu()
 
     def set_idle(self):
         """Set icon to idle (yellow) state — recording but no input activity."""
         if self._icon is not None:
             self._icon.icon = _icons["idle"]
-            self._icon.title = "InputDNA — Recording (Idle)"
+            self._icon.title = f"InputDNA {__version__} — Recording (Idle)"
 
     def set_stopped(self):
         """Set icon to stopped (red) state — not recording."""
         self._recording = False
         if self._icon is not None:
             self._icon.icon = _icons["stopped"]
-            self._icon.title = "InputDNA — Not Recording"
+            self._icon.title = f"InputDNA {__version__} — Not Recording"
             self._icon.update_menu()
 
     def _show_gui(self, icon, item):

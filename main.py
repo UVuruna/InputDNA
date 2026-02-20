@@ -34,6 +34,7 @@ from PySide6.QtCore import QTimer, Signal
 from PySide6.QtGui import QIcon
 
 import config
+from version import __version__
 from database.schema import init_mouse_db, init_keyboard_db, init_session_db
 from database.rotation import check_and_rotate
 from database.writer import DatabaseWriter
@@ -206,7 +207,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("InputDNA — Human Input Recorder")
+        self.setWindowTitle(f"InputDNA {__version__} — Human Input Recorder")
         self.resize(900, 700)
 
         self._user: UserProfile | None = None
@@ -643,6 +644,7 @@ def _apply_global_settings():
 
 
 def main():
+    logger.info(f"InputDNA {__version__} — starting")
     app = QApplication(sys.argv)
 
     # Load global settings (theme, data location, autostart) before anything else

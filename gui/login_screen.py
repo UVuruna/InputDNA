@@ -24,6 +24,7 @@ from PySide6.QtGui import QPixmap
 from gui.user_db import UserProfile, register, login, get_all_profiles
 from gui.global_settings_dialog import GlobalSettingsDialog
 from ui.tray_icon import detect_windows_theme
+from version import __version__
 
 _UI_DIR = Path(__file__).resolve().parent.parent / "ui"
 
@@ -117,8 +118,11 @@ class LoginScreen(QWidget):
 
         layout.addSpacing(10)
 
-        # Settings button — bottom right
+        # Bottom row: version label (left) + Settings button (right)
         settings_row = QHBoxLayout()
+        version_label = QLabel(f"v{__version__}")
+        version_label.setObjectName("hint-dim")
+        settings_row.addWidget(version_label)
         settings_row.addStretch()
         settings_btn = QPushButton("Settings")
         settings_btn.clicked.connect(self._open_global_settings)
