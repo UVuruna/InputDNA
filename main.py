@@ -585,12 +585,16 @@ class MainWindow(QMainWindow):
     # ── Window close ───────────────────────────────────────────
 
     def nativeEvent(self, eventType, message):
-        """Detect Windows shutdown/logoff via WM_QUERYENDSESSION."""
+        """Detect Windows shutdown/logoff via WM_QUERYENDSESSION / WM_ENDSESSION."""
         if eventType == b"windows_generic_MSG":
             msg = ctypes.wintypes.MSG.from_address(int(message))
             if msg.message == 0x0011:  # WM_QUERYENDSESSION
                 self._system_shutting_down = True
                 logger.info("System shutdown detected (WM_QUERYENDSESSION)")
+            elif msg.message == 0x0016 and msg.wParam:  # WM_ENDSESSION, confirmed
+                logger.info("System shutdown confirmed (WM_ENDSESSION) — forcing cleanup")
+                if self._recorder:
+                    self._stop_recording_sync()
         return super().nativeEvent(eventType, message)
 
     def closeEvent(self, event):
