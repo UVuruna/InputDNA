@@ -32,9 +32,7 @@ MODIFIER_SCANS = frozenset({
     0x5B, 0x5C,    # Left/Right Win
 })
 
-# Modifiers that trigger shortcut recording when combined with a main key.
-# Shift alone is excluded — it's used for uppercase typing and punctuation symbols.
-# Ctrl+Shift+V is still captured (Ctrl qualifies; Shift is included as a co-modifier).
+# Ctrl/Alt/Win — when any of these are held, every key combination is a shortcut.
 _SHORTCUT_MODIFIER_SCANS = frozenset({
     0x1D, 0xE01D,  # Left/Right Ctrl
     0x38, 0xE038,  # Left/Right Alt
@@ -71,6 +69,11 @@ LETTER_SCANS = frozenset({
 NUMBER_ROW_SCANS = frozenset({
     0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B,  # 1-0
 })
+
+# Keys that produce a character when pressed with Shift (uppercase/shifted symbols).
+# Shift + one of these = typing, NOT a shortcut.
+# Shift + anything else (Enter, Tab, F-keys, arrows...) = shortcut.
+_SHIFT_TYPING_SCANS = LETTER_SCANS | NUMBER_ROW_SCANS | CODE_SCANS
 
 WHITESPACE_SCANS = frozenset({
     0x39,   # Space
@@ -149,12 +152,18 @@ class KeyboardProcessor:
             # Track modifier press time for shortcut timing
             self._active_modifiers[scan] = event.t_ns
         else:
-            # Check if this is a shortcut (Ctrl/Alt/Win held + regular key)
-            # Shift alone is excluded — uppercase typing is not a shortcut
-            if any(s in _SHORTCUT_MODIFIER_SCANS for s in self._active_modifiers):
-                self._shortcut_main_scan = scan
-                self._shortcut_main_t_ns = event.t_ns
-                self._shortcut_main_release_t_ns = None  # Clear any stale value
+            # Shortcut = modifier held + key, EXCEPT: Shift alone + typable key = typing
+            # Shift+letter/number/symbol = uppercase/shifted char → NOT a shortcut
+            # Shift+Enter, Shift+Tab, Shift+F5, Shift+arrows → IS a shortcut
+            if self._active_modifiers:
+                shift_only_typing = (
+                    not any(s in _SHORTCUT_MODIFIER_SCANS for s in self._active_modifiers)
+                    and scan in _SHIFT_TYPING_SCANS
+                )
+                if not shift_only_typing:
+                    self._shortcut_main_scan = scan
+                    self._shortcut_main_t_ns = event.t_ns
+                    self._shortcut_main_release_t_ns = None  # Clear any stale value
 
             # Track transition (delay between consecutive non-modifier keys)
             if self._last_scan is not None and self._last_press_t_ns is not None:
@@ -186,8 +195,8 @@ class KeyboardProcessor:
             t_ns=event.t_ns,
         ))
 
-        # Shortcut detection: only when a Ctrl/Alt/Win modifier is released
-        if is_mod and scan in _SHORTCUT_MODIFIER_SCANS and self._shortcut_main_scan is not None:
+        # Shortcut detection: when any modifier is released with a pending main key
+        if is_mod and self._shortcut_main_scan is not None:
             self._try_emit_shortcut(event)
 
         if is_mod:
