@@ -6,9 +6,10 @@ INSERT into the appropriate SQLite table(s).
 
 Path points use delta encoding: seq=0 stores absolute (x, y),
 seq>0 stores deltas from the previous point (dx, dy).
-No t_ns stored per point — timing reconstructed in post-processing as:
-    point_t_ns[i] = start_t_ns + i * (end_t_ns - start_t_ns) // (N - 1)
-Metadata key 'path_encoding'='delta_v2' signals this schema to readers.
+Each point also stores dt_us: microseconds elapsed since the previous point.
+seq=0 always has dt_us=0 (timing anchored by start_t_ns in the parent record).
+Full timing reconstruction: t_ns[0]=start_t_ns, t_ns[i]=t_ns[i-1]+dt_us[i]*1000
+Metadata key 'path_encoding'='delta_v3' signals this schema to readers.
 """
 
 from dataclasses import dataclass, field
@@ -24,27 +25,30 @@ class PathPoint:
     """Single coordinate in a mouse path or drag path."""
     x: int
     y: int
-    t_ns: int   # Internal use only — NOT written to DB; used for downsampling
-                # and to extract start_t_ns / end_t_ns on the movement/drag.
+    t_ns: int   # Used for downsampling, computing dt_us between points,
+                # and extracting start_t_ns / end_t_ns on the movement/drag.
+                # NOT written to DB directly — stored as dt_us deltas instead.
 
 
 def _delta_encode_points(parent_id: int, points: List[PathPoint]) -> list[tuple]:
     """
     Delta-encode a list of PathPoints for DB storage.
 
-    Returns list of (parent_id, seq, x_or_dx, y_or_dy) tuples.
-    First point (seq=0): absolute values.
-    Subsequent points: delta from previous point.
-    No t_ns — reconstructed from movement/drag start_t_ns + end_t_ns.
+    Returns list of (parent_id, seq, x_or_dx, y_or_dy, dt_us) tuples.
+    First point (seq=0): absolute (x, y), dt_us=0 (timing from parent start_t_ns).
+    Subsequent points: delta (dx, dy), dt_us=microseconds since previous point.
+    Full timing reconstruction: t_ns[0]=start_t_ns, t_ns[i]=t_ns[i-1]+dt_us[i]*1000
     """
     if not points:
         return []
-    rows = [(parent_id, 0, points[0].x, points[0].y)]
+    rows = [(parent_id, 0, points[0].x, points[0].y, 0)]
     for i in range(1, len(points)):
+        dt_us = (points[i].t_ns - points[i - 1].t_ns) // 1000
         rows.append((
             parent_id, i,
             points[i].x - points[i - 1].x,
             points[i].y - points[i - 1].y,
+            dt_us,
         ))
     return rows
 
@@ -90,7 +94,7 @@ class MovementSession:
         )
         if self.path_points:
             cur.executemany(
-                "INSERT INTO path_points (movement_id, seq, x, y) VALUES (?,?,?,?)",
+                "INSERT INTO path_points (movement_id, seq, x, y, dt_us) VALUES (?,?,?,?,?)",
                 _delta_encode_points(self.movement_id, self.path_points),
             )
 
@@ -154,7 +158,7 @@ class DragRecord:
         )
         if self.path_points:
             cur.executemany(
-                "INSERT INTO drag_points (drag_id, seq, x, y) VALUES (?,?,?,?)",
+                "INSERT INTO drag_points (drag_id, seq, x, y, dt_us) VALUES (?,?,?,?,?)",
                 _delta_encode_points(self.drag_id, self.path_points),
             )
 

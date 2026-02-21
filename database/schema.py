@@ -57,14 +57,15 @@ CREATE TABLE IF NOT EXISTS movements (
 );
 
 -- Raw path coordinates within movements (delta-encoded)
--- seq=0: absolute (x, y); seq>0: deltas (Δx, Δy)
+-- seq=0: absolute (x, y), dt_us=0; seq>0: deltas (Δx, Δy), dt_us=µs since prev point
 -- No id column — composite PK (movement_id, seq) is sufficient
--- No t_ns — reconstructed as: start_t_ns + seq * (end_t_ns - start_t_ns) / (N-1)
+-- Timing: t_ns[0]=start_t_ns, t_ns[i]=t_ns[i-1]+dt_us[i]*1000
 CREATE TABLE IF NOT EXISTS path_points (
     movement_id  INTEGER NOT NULL REFERENCES movements(id),
     seq          INTEGER NOT NULL,
     x            INTEGER NOT NULL,
     y            INTEGER NOT NULL,
+    dt_us        INTEGER NOT NULL,
     PRIMARY KEY (movement_id, seq)
 );
 
@@ -102,14 +103,15 @@ CREATE TABLE IF NOT EXISTS drags (
 );
 
 -- Path coordinates during drags (delta-encoded)
--- seq=0: absolute (x, y); seq>0: deltas (Δx, Δy)
+-- seq=0: absolute (x, y), dt_us=0; seq>0: deltas (Δx, Δy), dt_us=µs since prev point
 -- No id column — composite PK (drag_id, seq) is sufficient
--- No t_ns — reconstructed as: start_t_ns + seq * (end_t_ns - start_t_ns) / (N-1)
+-- Timing: t_ns[0]=start_t_ns, t_ns[i]=t_ns[i-1]+dt_us[i]*1000
 CREATE TABLE IF NOT EXISTS drag_points (
     drag_id  INTEGER NOT NULL REFERENCES drags(id),
     seq      INTEGER NOT NULL,
     x        INTEGER NOT NULL,
     y        INTEGER NOT NULL,
+    dt_us    INTEGER NOT NULL,
     PRIMARY KEY (drag_id, seq)
 );
 
@@ -223,7 +225,7 @@ def init_mouse_db(db_path: Path) -> sqlite3.Connection:
     # Signal schema version to post-processing readers
     conn.execute(
         "INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)",
-        ("path_encoding", "delta_v2"),
+        ("path_encoding", "delta_v3"),
     )
     conn.commit()
     return conn
