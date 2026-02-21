@@ -104,7 +104,28 @@ for estimating mouse polling rate from move event timestamps.
 | Class | Purpose |
 |-------|---------|
 | `SystemMonitor` | Polls system state, emits `SystemEventRecord` on change |
-| `PollingRateEstimator` | Estimates mouse Hz from move event intervals |
+| `PollingRateEstimator` | Estimates mouse Hz from move event intervals (rolling window, continuous) |
+
+**`PollingRateEstimator` design:**
+
+Maintains a rolling `deque` of the last `POLLING_RATE_SAMPLE_COUNT` (300) valid
+inter-event intervals. Two filters prevent garbage from entering the window:
+
+| Filter | Threshold | Removes |
+|--------|-----------|---------|
+| Min | `POLLING_RATE_MIN_INTERVAL_NS` (125 μs) | OS burst-delivery artifacts |
+| Max | `POLLING_RATE_MAX_INTERVAL_NS` (20 ms) | Idle gaps / slow cursor movement |
+
+Calculation uses **median** of the window, snapped to the nearest standard rate
+(125, 250, 500, 1000, 2000, 4000, 8000 Hz). The first estimate fires as soon as
+the window fills; subsequent recalculations respect a cooldown
+(`POLLING_RATE_UPDATE_INTERVAL_S`, default 60 s) so a corrected estimate is
+eventually picked up without constant CPU work.
+
+`start_polling_estimation()` starts a daemon pynput listener that runs for the
+entire login session. It returns a `stop()` callable — call it on logout.
+The `on_done(hz)` callback is fired every time the snapped estimate **changes**
+(not just on the first result), so the dashboard stays current.
 
 <a id="why-scan-codes"></a>
 

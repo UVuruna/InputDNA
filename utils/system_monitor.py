@@ -16,8 +16,10 @@ Polling rate is estimated separately from mouse move event timestamps
 
 import ctypes
 import logging
+import statistics
 import threading
 import time
+from collections import deque
 from typing import Callable, Optional
 
 import config
@@ -135,88 +137,125 @@ class PollingRateEstimator:
     """
     Estimates mouse polling rate from move event timestamps.
 
-    Feed it timestamps of consecutive mouse move events. After enough
-    samples, it calculates the median interval and derives Hz.
+    Maintains a rolling window of recent inter-event intervals. Intervals
+    outside the physically plausible range are discarded before entering
+    the window:
+      - Below POLLING_RATE_MIN_INTERVAL_NS: burst artifacts from OS event
+        batching (appear faster than the hardware can actually poll).
+      - Above POLLING_RATE_MAX_INTERVAL_NS: idle gaps where the cursor
+        wasn't moving (not representative of the hardware poll rate).
+
+    After the window fills, calculates using the median of stored intervals
+    and snaps to the nearest standard rate. Recalculates periodically
+    (POLLING_RATE_UPDATE_INTERVAL_S cooldown) so a changed USB report rate
+    or a bad initial estimate is eventually corrected.
+
+    Thread-safe under CPython GIL: listener thread writes, Qt thread reads
+    estimated_hz.
     """
 
     def __init__(self, sample_count: int = config.POLLING_RATE_SAMPLE_COUNT):
         self._sample_count = sample_count
-        self._intervals_ns: list[int] = []
+        self._intervals_ns: deque[int] = deque(maxlen=sample_count)
         self._last_t_ns: Optional[int] = None
         self._estimated_hz: Optional[int] = None
+        self._last_calculated_ns: int = 0  # 0 = never calculated
 
-    def add_move_timestamp(self, t_ns: int):
-        """Feed a mouse move event timestamp. Call for each RawMouseMove."""
-        if self._estimated_hz is not None:
-            return  # Already estimated
+    def add_move_timestamp(self, t_ns: int) -> Optional[int]:
+        """
+        Feed a mouse move event timestamp.
 
+        Returns the new snapped Hz if the estimate changed, else None.
+        """
         if self._last_t_ns is not None:
             interval = t_ns - self._last_t_ns
-            if interval > 0:
+            if config.POLLING_RATE_MIN_INTERVAL_NS <= interval <= config.POLLING_RATE_MAX_INTERVAL_NS:
                 self._intervals_ns.append(interval)
 
         self._last_t_ns = t_ns
 
-        if len(self._intervals_ns) >= self._sample_count:
-            self._calculate()
+        if len(self._intervals_ns) < self._sample_count:
+            return None  # Window not full yet
 
-    def _calculate(self):
-        """Calculate polling rate from collected intervals.
+        # First estimate: calculate immediately when window fills.
+        # Subsequent estimates: respect cooldown to avoid excess CPU.
+        cooldown_ns = int(config.POLLING_RATE_UPDATE_INTERVAL_S * 1_000_000_000)
+        if self._last_calculated_ns == 0 or (t_ns - self._last_calculated_ns) >= cooldown_ns:
+            return self._calculate(t_ns)
 
-        Uses 10th percentile instead of median.  The shortest intervals
-        represent back-to-back hardware polls where the cursor actually
-        moved.  Slow mouse movement produces longer gaps (zero-delta
-        polls are suppressed by Windows), inflating the median.
+        return None
+
+    def _calculate(self, now: int) -> Optional[int]:
         """
-        sorted_intervals = sorted(self._intervals_ns)
-        idx = max(0, len(sorted_intervals) // 10)
-        p10_ns = sorted_intervals[idx]
-        if p10_ns > 0:
-            self._estimated_hz = round(1_000_000_000 / p10_ns)
-            logger.info(f"Mouse polling rate estimated: ~{self._estimated_hz} Hz "
-                        f"(p10={p10_ns/1e6:.2f} ms from {len(sorted_intervals)} samples)")
+        Calculate polling rate from the rolling window using median.
+
+        Returns new snapped Hz if the value changed, else None.
+        """
+        self._last_calculated_ns = now
+        intervals = list(self._intervals_ns)
+        if not intervals:
+            return None
+
+        median_ns = statistics.median(intervals)
+        if median_ns <= 0:
+            return None
+
+        raw_hz = round(1_000_000_000 / median_ns)
+        snapped = config.snap_polling_rate(raw_hz)
+        logger.info(
+            f"Mouse polling rate: raw={raw_hz} Hz → snapped={snapped} Hz "
+            f"(median={median_ns / 1e6:.3f} ms, {len(intervals)} samples)"
+        )
+
+        if snapped != self._estimated_hz:
+            self._estimated_hz = snapped
+            return snapped
+
+        return None
 
     @property
     def estimated_hz(self) -> Optional[int]:
         return self._estimated_hz
 
 
-def start_polling_estimation(on_done: Optional[Callable[[int], None]] = None) -> PollingRateEstimator:
+def start_polling_estimation(on_done: Optional[Callable[[int], None]] = None) -> Callable[[], None]:
     """
-    Start a temporary mouse listener to estimate polling rate.
+    Start a continuous background listener to estimate mouse polling rate.
 
-    Runs in the background. Once enough samples are collected, the
-    listener stops itself and calls on_done(hz) on the listener thread.
-    Also sets config.ESTIMATED_POLLING_HZ.
+    Runs until the returned stop() callable is called (e.g. on logout).
+    Calls on_done(hz) on the listener thread each time the estimate changes.
+    Also updates config.ESTIMATED_POLLING_HZ on each change.
 
-    Returns the estimator so callers can check .estimated_hz later.
+    Returns a stop() callable. Store it and call it on logout.
     """
     from pynput import mouse as _mouse
     from utils.timing import now_ns as _now_ns
 
     estimator = PollingRateEstimator()
+    _last_reported: dict = {"hz": None}
     holder: dict = {"listener": None}
 
     def _on_move(x, y):
-        t = _now_ns()
-        estimator.add_move_timestamp(t)
-        if estimator.estimated_hz is not None:
-            raw_hz = estimator.estimated_hz
-            snapped = config.snap_polling_rate(raw_hz)
-            config.ESTIMATED_POLLING_HZ = snapped
-            logger.info(f"Polling rate set: raw ~{raw_hz} Hz → snapped {snapped} Hz")
+        new_hz = estimator.add_move_timestamp(_now_ns())
+        if new_hz is not None and new_hz != _last_reported["hz"]:
+            _last_reported["hz"] = new_hz
+            config.ESTIMATED_POLLING_HZ = new_hz
             if on_done is not None:
-                on_done(snapped)
-            listener = holder.get("listener")
-            if listener is not None:
-                listener.stop()
+                on_done(new_hz)
+
+    def stop():
+        listener = holder.get("listener")
+        if listener is not None:
+            listener.stop()
+            holder["listener"] = None
+            logger.info("Polling rate estimation stopped")
 
     listener = _mouse.Listener(on_move=_on_move)
     listener.daemon = True
     holder["listener"] = listener
     listener.start()
-    logger.info("Polling rate estimation started (temporary mouse listener)")
-    return estimator
+    logger.info("Polling rate estimation started (continuous background listener)")
+    return stop
 
 
 # ─────────────────────────────────────────────────────────────

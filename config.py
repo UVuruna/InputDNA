@@ -157,8 +157,20 @@ FLUSH_INTERVAL_S = 2.0
 # acceleration, screen resolution, keyboard layout).
 SYSTEM_MONITOR_INTERVAL_S = 10.0
 
-# Number of mouse move events to sample for polling rate estimation.
-POLLING_RATE_SAMPLE_COUNT = 50
+# Rolling window size for polling rate estimation (number of filtered intervals).
+# Larger window = more stable estimate; at 500 Hz ~0.6 s to fill initially.
+POLLING_RATE_SAMPLE_COUNT = 300
+
+# Seconds between periodic re-estimation after the first result.
+# First estimate fires immediately when the window fills.
+POLLING_RATE_UPDATE_INTERVAL_S = 60.0
+
+# Hardware interval bounds for filtering (nanoseconds).
+# Intervals outside this range are discarded before entering the window.
+#   Min = 125 μs  →  fastest possible interval at 8000 Hz (burst artifact threshold)
+#   Max = 20 ms   →  slower than 50 Hz; indicates idle gap, not a real poll interval
+POLLING_RATE_MIN_INTERVAL_NS = 125_000      # 8000 Hz upper bound
+POLLING_RATE_MAX_INTERVAL_NS = 20_000_000   # 50 Hz lower bound
 
 # Estimated mouse polling rate (Hz). Set at runtime by the polling rate
 # estimator after login. None means not yet measured.

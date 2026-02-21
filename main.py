@@ -269,8 +269,9 @@ class MainWindow(QMainWindow):
         # Set active user folder in config (uses CUSTOM_USER_DATA_DIR if set)
         config.set_active_user(profile.username, profile.surname, profile.date_of_birth)
 
-        # Start polling rate estimation immediately (temporary mouse listener)
-        self._polling_estimator = start_polling_estimation(
+        # Start continuous polling rate estimation (background mouse listener).
+        # Returns a stop() callable — stored so we can clean up on logout.
+        self._stop_polling_estimation = start_polling_estimation(
             on_done=self._on_polling_rate_estimated,
         )
         self._polling_check_timer.start(500)
@@ -342,6 +343,9 @@ class MainWindow(QMainWindow):
             self._stop_recording_sync()
 
         self._polling_check_timer.stop()
+        if hasattr(self, "_stop_polling_estimation"):
+            self._stop_polling_estimation()
+            self._stop_polling_estimation = lambda: None
 
         # Reset tray to default icon (tray stays alive)
         if self._tray:
