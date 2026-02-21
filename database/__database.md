@@ -37,8 +37,8 @@ Each user has **three separate databases**:
 
 | Table | Description |
 |-------|-------------|
-| `movements` | Movement sessions (start→end with summary metrics) |
-| `path_points` | Raw (x, y, t_ns) coordinates within movements |
+| `movements` | Movement sessions with `start_t_ns`/`end_t_ns` bookends |
+| `path_points` | Delta-encoded path: seq=0 absolute (x,y), seq>0 (Δx,Δy,dt_us) |
 | `click_sequences` | Unified click tracking (single/double/spam) |
 | `click_details` | Individual clicks within sequences |
 | `drags` | Click-hold-move-release operations |
@@ -65,12 +65,12 @@ Each user has **three separate databases**:
 **Key schema details:**
 
 - `movements.id` and `drags.id` are **app-generated** (not AUTOINCREMENT): format `session_id × 1_000_000 + seq_within_session`. This encodes the session directly (no separate `recording_session_id` FK needed) and allows the processor to know the ID before DB write.
-- `path_points` and `drag_points` use **delta encoding** with **composite primary keys**: `(movement_id, seq)` and `(drag_id, seq)` — no separate `id` column. `seq=0` stores absolute `(x, y)`, `seq>0` stores deltas. Metadata key `path_encoding=delta_v2` in mouse.db signals the new schema to readers.
-- `path_points` and `drag_points` do **not store `t_ns`** — timing is reconstructed in post-processing from `movements.start_t_ns`, `movements.end_t_ns`, and point count. See [docs/08-schema-optimization.md](../docs/08-schema-optimization.md) for the reconstruction formula.
+- `path_points`, `drag_points`, and `click_details` are **`WITHOUT ROWID`** tables with composite primary keys: `(movement_id, seq)`, `(drag_id, seq)`, `(sequence_id, seq)`. No hidden rowid — data stored directly in the PK B-tree. Eliminates the duplicate B-tree that a regular composite PK would create.
+- **Delta encoding:** `seq=0` stores absolute `(x, y)`, `dt_us=0`. `seq>0` stores `(Δx, Δy)` and `dt_us` (microseconds since previous point). **Timing reconstruction:** `t_ns[0] = start_t_ns`, `t_ns[i] = t_ns[i-1] + dt_us[i] × 1000`. Metadata key `path_encoding=delta_v3` in mouse.db signals this schema to readers.
 - `keystrokes.modifier_state` is stored as an **INTEGER bitmask** (bit 0=Ctrl, bit 1=Alt, bit 2=Shift, bit 3=Win), not a JSON string.
 - `click_details` uses composite primary key `(sequence_id, seq)` — no separate `id` column.
 
-> **Schema version:** `path_encoding=delta_v2` in mouse.db metadata table. Old databases use `delta_v1` (with `t_ns` per point and `id` columns). Post-processing must check this key before reading path data.
+> **Schema version:** `path_encoding=delta_v3` in mouse.db metadata table. `delta_v1` = old schema (absolute `t_ns` per point, auto-increment `id`). `delta_v3` = current (delta `dt_us`, composite PK, WITHOUT ROWID). Post-processing must check this key before reading path data.
 
 **SQLite pragmas applied (all three databases):**
 
@@ -151,8 +151,8 @@ flowchart LR
 | No indexes by default | Added later during ML prep phase if needed (INSERT-heavy workload) |
 | Delta-encoded paths | Smaller integers → fewer bytes in SQLite varint encoding (~30% savings) |
 | App-generated movement and drag IDs | Format `session_id × 1_000_000 + seq` — encodes session, processor knows ID before write, links clicks/scrolls/drags immediately |
-| No `id` on path_points / drag_points | Composite PK `(movement_id, seq)` is already unique — auto-increment `id` was 8 bytes × 3M+ rows of pure overhead |
-| No `t_ns` on path_points / drag_points | Mouse polling is constant 500 Hz; per-point timestamps capture OS scheduling jitter (not behavioral signal); timing reconstructed from `start_t_ns + seq × (end_t_ns - start_t_ns) / (N-1)` |
+| `WITHOUT ROWID` on path/drag/click_details | Composite PK without WITHOUT ROWID creates two B-trees (hidden rowid + PK index), doubling storage. WITHOUT ROWID stores data directly in one PK B-tree. Result: ~25% smaller mouse.db |
+| `dt_us` per path point, not `t_ns` | WH_MOUSE_LL fires only on pixel change — slow movements have non-uniform timing. `dt_us` (~2 bytes) preserves the actual velocity profile; absolute `t_ns` (~8 bytes) would be larger and uniform start/end interpolation destroys acceleration/deceleration |
 | `modifier_state` as bitmask | 4 boolean flags stored as `INTEGER` (1 byte) vs JSON string (~62 bytes) — 62× smaller per keystroke |
 | Derivable columns removed | `key_name`, `hand`, `finger`, `delay_ms`, `direction`, computed stats — all derivable in post-processing from scan codes and timestamps |
 
