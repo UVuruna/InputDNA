@@ -19,7 +19,7 @@
 !define APP_NAME "InputDNA"
 !define APP_PUBLISHER "UVuruna"
 !define APP_EXE "InputDNA.exe"
-!define APP_VERSION "0.1.0"
+!define APP_VERSION "0.2.320"
 
 ; Registry key for uninstall info
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
