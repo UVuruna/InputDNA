@@ -7,6 +7,7 @@ gaps becomes their personal CLICK_SEQUENCE_GAP_MS threshold.
 """
 
 import time
+from datetime import datetime
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -15,7 +16,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 import config
-from gui.user_settings import save_setting
+from gui.user_settings import save_settings
 from utils.system_monitor import get_system_double_click_time
 
 
@@ -169,10 +170,12 @@ class ClickCalibrationDialog(QDialog):
     def _save_and_close(self):
         """Save calibrated value and close dialog."""
         if self._result_ms is not None:
-            save_setting(
+            save_settings(
                 self._user_id,
-                "recording.click_sequence_gap_ms",
-                str(self._result_ms),
+                {
+                    "recording.click_sequence_gap_ms": str(self._result_ms),
+                    "recording.click_calibrated_at": datetime.now().isoformat(timespec="seconds"),
+                },
             )
             config.CLICK_SEQUENCE_GAP_MS = self._result_ms
         self.accept()
