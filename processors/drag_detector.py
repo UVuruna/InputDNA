@@ -15,7 +15,6 @@ from typing import Optional, Callable
 
 from models.events import RawMouseMove, RawMouseClick
 from models.sessions import DragRecord, PathPoint
-from utils.timing import ns_to_ms, wall_clock_iso
 import config
 
 logger = logging.getLogger(__name__)
@@ -29,8 +28,13 @@ class DragDetector:
     When a drag completes, calls on_drag_complete callback.
     """
 
-    def __init__(self, on_drag_complete: Callable[[DragRecord], None]):
+    def __init__(self, on_drag_complete: Callable[[DragRecord], None],
+                 recording_session_id: int = 0):
         self._on_complete = on_drag_complete
+
+        # Drag ID generation: session * 1_000_000 + seq
+        self._session_num = recording_session_id
+        self._drag_seq = 0
 
         # State
         self._button_down: Optional[str] = None
@@ -96,18 +100,19 @@ class DragDetector:
 
         points = self._drag_points
         start = points[0]
-        end = points[-1]
-        duration = ns_to_ms(release_event.t_ns - self._down_t_ns)
+
+        # Generate app-controlled drag ID: session * 1_000_000 + seq
+        self._drag_seq += 1
+        drag_id = self._session_num * 1_000_000 + self._drag_seq
 
         record = DragRecord(
+            drag_id=drag_id,
             button=self._button_down,
             start_x=start.x,
             start_y=start.y,
-            end_x=end.x,
-            end_y=end.y,
-            duration_ms=duration,
+            start_t_ns=self._down_t_ns,
+            end_t_ns=release_event.t_ns,
             path_points=points,
-            timestamp=wall_clock_iso(),
         )
 
         self._on_complete(record)

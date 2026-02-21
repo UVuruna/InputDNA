@@ -42,90 +42,87 @@ def _init(db_path: Path, schema: str) -> sqlite3.Connection:
 _MOUSE_SCHEMA = """
 
 -- Movement Sessions
+-- id: app-generated = session_id × 1_000_000 + seq_within_session
+-- start_t_ns / end_t_ns: perf_counter_ns bookends (timing reconstructed from these)
+-- end_event: what triggered end — 'click', 'drag', 'scroll', 'idle'
 CREATE TABLE IF NOT EXISTS movements (
-    id                   INTEGER PRIMARY KEY,
-    start_x              INTEGER NOT NULL,
-    start_y              INTEGER NOT NULL,
-    end_x                INTEGER NOT NULL,
-    end_y                INTEGER NOT NULL,
-    end_event            TEXT    NOT NULL,
-    duration_ms          REAL    NOT NULL,
-    distance_px          REAL    NOT NULL,
-    path_length_px       REAL    NOT NULL,
-    point_count          INTEGER NOT NULL,
-    hour_of_day          INTEGER NOT NULL,
-    day_of_week          INTEGER NOT NULL,
-    recording_session_id INTEGER,
-    timestamp            TEXT    NOT NULL
-);
-
--- Raw path coordinates within movements (delta-encoded)
-CREATE TABLE IF NOT EXISTS path_points (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    movement_id  INTEGER NOT NULL REFERENCES movements(id),
-    seq          INTEGER NOT NULL,
-    x            INTEGER NOT NULL,
-    y            INTEGER NOT NULL,
-    t_ns         INTEGER NOT NULL
-);
-
--- Click sequences (single / double / spam)
-CREATE TABLE IF NOT EXISTS click_sequences (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    movement_id       INTEGER REFERENCES movements(id),
-    button            TEXT    NOT NULL,
-    click_count       INTEGER NOT NULL,
-    total_duration_ms REAL    NOT NULL,
-    x                 INTEGER NOT NULL,
-    y                 INTEGER NOT NULL,
-    timestamp         TEXT    NOT NULL
-);
-
--- Individual clicks within sequences
-CREATE TABLE IF NOT EXISTS click_details (
-    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-    sequence_id          INTEGER NOT NULL REFERENCES click_sequences(id),
-    seq                  INTEGER NOT NULL,
-    x                    INTEGER NOT NULL,
-    y                    INTEGER NOT NULL,
-    press_duration_ms    REAL    NOT NULL,
-    delay_since_prev_ms  REAL    NOT NULL,
-    t_ns                 INTEGER NOT NULL
-);
-
--- Drag operations (click-hold-move-release)
-CREATE TABLE IF NOT EXISTS drags (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    button      TEXT    NOT NULL,
+    id          INTEGER PRIMARY KEY,
     start_x     INTEGER NOT NULL,
     start_y     INTEGER NOT NULL,
     end_x       INTEGER NOT NULL,
     end_y       INTEGER NOT NULL,
-    duration_ms REAL    NOT NULL,
-    point_count INTEGER NOT NULL,
-    timestamp   TEXT    NOT NULL
+    end_event   TEXT    NOT NULL,
+    start_t_ns  INTEGER NOT NULL,
+    end_t_ns    INTEGER NOT NULL
+);
+
+-- Raw path coordinates within movements (delta-encoded)
+-- seq=0: absolute (x, y); seq>0: deltas (Δx, Δy)
+-- No id column — composite PK (movement_id, seq) is sufficient
+-- No t_ns — reconstructed as: start_t_ns + seq * (end_t_ns - start_t_ns) / (N-1)
+CREATE TABLE IF NOT EXISTS path_points (
+    movement_id  INTEGER NOT NULL REFERENCES movements(id),
+    seq          INTEGER NOT NULL,
+    x            INTEGER NOT NULL,
+    y            INTEGER NOT NULL,
+    PRIMARY KEY (movement_id, seq)
+);
+
+-- Click sequences (single / double / spam)
+-- movement_id: FK to movements (NULL if click without preceding movement)
+-- x, y, button, timestamp, click_count, total_duration_ms: all derivable from click_details
+CREATE TABLE IF NOT EXISTS click_sequences (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    movement_id INTEGER REFERENCES movements(id),
+    button      TEXT    NOT NULL
+);
+
+-- Individual clicks within sequences
+-- No id column — composite PK (sequence_id, seq) is sufficient
+-- x, y: derivable from click_sequences or movement end position
+-- delay_since_prev_ms: derivable from t_ns differences in post-processing
+CREATE TABLE IF NOT EXISTS click_details (
+    sequence_id       INTEGER NOT NULL REFERENCES click_sequences(id),
+    seq               INTEGER NOT NULL,
+    press_duration_ms REAL    NOT NULL,
+    t_ns              INTEGER NOT NULL,
+    PRIMARY KEY (sequence_id, seq)
+);
+
+-- Drag operations (click-hold-move-release)
+-- id: app-generated = session_id × 1_000_000 + seq_within_session
+-- end_x, end_y, duration_ms, point_count: derivable from drag_points + start_t_ns/end_t_ns
+CREATE TABLE IF NOT EXISTS drags (
+    id          INTEGER PRIMARY KEY,
+    button      TEXT    NOT NULL,
+    start_x     INTEGER NOT NULL,
+    start_y     INTEGER NOT NULL,
+    start_t_ns  INTEGER NOT NULL,
+    end_t_ns    INTEGER NOT NULL
 );
 
 -- Path coordinates during drags (delta-encoded)
+-- seq=0: absolute (x, y); seq>0: deltas (Δx, Δy)
+-- No id column — composite PK (drag_id, seq) is sufficient
+-- No t_ns — reconstructed as: start_t_ns + seq * (end_t_ns - start_t_ns) / (N-1)
 CREATE TABLE IF NOT EXISTS drag_points (
-    id       INTEGER PRIMARY KEY AUTOINCREMENT,
     drag_id  INTEGER NOT NULL REFERENCES drags(id),
     seq      INTEGER NOT NULL,
     x        INTEGER NOT NULL,
     y        INTEGER NOT NULL,
-    t_ns     INTEGER NOT NULL
+    PRIMARY KEY (drag_id, seq)
 );
 
 -- Scroll wheel events
+-- direction: derivable as sign(delta) in post-processing
+-- timestamp: derivable from t_ns in post-processing
 CREATE TABLE IF NOT EXISTS scrolls (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     movement_id INTEGER REFERENCES movements(id),
-    direction   TEXT    NOT NULL,
     delta       INTEGER NOT NULL,
     x           INTEGER NOT NULL,
     y           INTEGER NOT NULL,
-    t_ns        INTEGER NOT NULL,
-    timestamp   TEXT    NOT NULL
+    t_ns        INTEGER NOT NULL
 );
 
 -- Key-value metadata (path_encoding, etc.)
@@ -133,6 +130,7 @@ CREATE TABLE IF NOT EXISTS metadata (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
 
 """
 
@@ -143,47 +141,40 @@ CREATE TABLE IF NOT EXISTS metadata (
 
 _KEYBOARD_SCHEMA = """
 
--- Individual key presses with scan codes, vkey, and layout
+-- Individual key presses
+-- modifier_state: INTEGER bitmask (bit0=Ctrl, bit1=Alt, bit2=Shift, bit3=Win)
+-- vkey, key_name, active_layout, hand, finger, timestamp: all derivable in post-processing
 CREATE TABLE IF NOT EXISTS keystrokes (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     scan_code         INTEGER NOT NULL,
-    vkey              INTEGER NOT NULL,
-    key_name          TEXT    NOT NULL,
     press_duration_ms REAL    NOT NULL,
-    modifier_state    TEXT    NOT NULL,
-    active_layout     TEXT    NOT NULL,
-    hand              TEXT    NOT NULL,
-    finger            TEXT    NOT NULL,
-    t_ns              INTEGER NOT NULL,
-    timestamp         TEXT    NOT NULL
+    modifier_state    INTEGER NOT NULL,
+    t_ns              INTEGER NOT NULL
 );
 
 -- Delay between consecutive keys (scan code pairs)
+-- from_key_name, to_key_name: derivable from scan codes in post-processing
+-- delay_ms: derivable from t_ns differences in post-processing
 CREATE TABLE IF NOT EXISTS key_transitions (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_scan     INTEGER NOT NULL,
-    to_scan       INTEGER NOT NULL,
-    from_key_name TEXT    NOT NULL,
-    to_key_name   TEXT    NOT NULL,
-    delay_ms      REAL    NOT NULL,
-    typing_mode   TEXT    NOT NULL,
-    t_ns          INTEGER NOT NULL
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_scan   INTEGER NOT NULL,
+    to_scan     INTEGER NOT NULL,
+    typing_mode TEXT    NOT NULL,
+    t_ns        INTEGER NOT NULL
 );
 
 -- Keyboard shortcut timing profiles
+-- shortcut_name, main_key_name, timestamp: derivable in post-processing
 CREATE TABLE IF NOT EXISTS shortcuts (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-    shortcut_name        TEXT    NOT NULL,
     modifier_scans       TEXT    NOT NULL,
     main_scan            INTEGER NOT NULL,
-    main_key_name        TEXT    NOT NULL,
     modifier_to_main_ms  REAL    NOT NULL,
     main_hold_ms         REAL    NOT NULL,
     overlap_ms           REAL    NOT NULL,
     total_ms             REAL    NOT NULL,
     release_order        TEXT    NOT NULL,
-    t_ns                 INTEGER NOT NULL,
-    timestamp            TEXT    NOT NULL
+    t_ns                 INTEGER NOT NULL
 );
 
 """
@@ -229,10 +220,10 @@ CREATE TABLE IF NOT EXISTS metadata (
 def init_mouse_db(db_path: Path) -> sqlite3.Connection:
     """Create mouse database with movement/click/drag/scroll tables."""
     conn = _init(db_path, _MOUSE_SCHEMA)
-    # Signal delta encoding to post-processing readers
+    # Signal schema version to post-processing readers
     conn.execute(
         "INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)",
-        ("path_encoding", "delta_v1"),
+        ("path_encoding", "delta_v2"),
     )
     conn.commit()
     return conn

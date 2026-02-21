@@ -17,8 +17,7 @@ from typing import Optional, Callable
 
 from models.events import RawKeyPress, RawKeyRelease
 from models.sessions import KeystrokeRecord, KeyTransitionRecord, ShortcutRecord
-from utils.timing import ns_to_ms, interval_ms, wall_clock_iso
-from utils.keyboard_layout import infer_hand, infer_finger
+from utils.timing import ns_to_ms
 
 logger = logging.getLogger(__name__)
 
@@ -74,9 +73,23 @@ WHITESPACE_SCANS = frozenset({
 CAPSLOCK_SCAN = 0x3A
 
 
-def _detect_typing_mode(scan: int, modifier_state: dict) -> str:
+def _modifier_bitmask(modifier_state: dict) -> int:
+    """Convert modifier_state dict to bitmask integer.
+
+    Encoding: bit0=Ctrl, bit1=Alt, bit2=Shift, bit3=Win.
+    """
+    return (
+        (bool(modifier_state.get("ctrl"))  << 0) |
+        (bool(modifier_state.get("alt"))   << 1) |
+        (bool(modifier_state.get("shift")) << 2) |
+        (bool(modifier_state.get("win"))   << 3)
+    )
+
+
+def _detect_typing_mode(scan: int, modifier_bitmask: int) -> str:
     """Classify current typing context."""
-    if any(modifier_state.get(m) for m in ("ctrl", "alt", "win")):
+    # bit0=Ctrl, bit1=Alt, bit3=Win — Shift alone is not a shortcut modifier
+    if modifier_bitmask & 0b1011:
         return "shortcut"
     if scan in NUMPAD_SCANS:
         return "numpad"
@@ -103,31 +116,25 @@ class KeyboardProcessor:
 
         # Last non-modifier key press for transition tracking
         self._last_scan: Optional[int] = None
-        self._last_key_name: Optional[str] = None
         self._last_press_t_ns: Optional[int] = None
 
-        # Press context: stores (vkey, active_layout, modifier_state_json)
-        # from press events, keyed by scan code, used on release
-        self._press_context: dict[int, tuple[int, str, str]] = {}
+        # Press context: modifier bitmask at time of press, keyed by scan code
+        self._press_context: dict[int, int] = {}
 
         # Shortcut tracking
         self._active_modifiers: dict[int, int] = {}  # scan → press t_ns
         self._shortcut_main_scan: Optional[int] = None
         self._shortcut_main_t_ns: int = 0
-        self._shortcut_main_name: str = ""
         self._shortcut_main_release_t_ns: Optional[int] = None
 
     def process_press(self, event: RawKeyPress):
         """Process a key press event."""
         scan = event.scan_code
         is_mod = scan in MODIFIER_SCANS
+        bitmask = _modifier_bitmask(event.modifier_state)
 
-        # Store press context for use on release
-        self._press_context[scan] = (
-            event.vkey,
-            event.active_layout,
-            json.dumps(event.modifier_state),
-        )
+        # Store modifier bitmask at press time, retrieved on release
+        self._press_context[scan] = bitmask
 
         if is_mod:
             # Track modifier press time for shortcut timing
@@ -137,25 +144,19 @@ class KeyboardProcessor:
             if self._active_modifiers:
                 self._shortcut_main_scan = scan
                 self._shortcut_main_t_ns = event.t_ns
-                self._shortcut_main_name = event.key_name
 
             # Track transition (delay between consecutive non-modifier keys)
             if self._last_scan is not None and self._last_press_t_ns is not None:
-                delay = ns_to_ms(event.t_ns - self._last_press_t_ns)
-                mode = _detect_typing_mode(scan, event.modifier_state)
+                mode = _detect_typing_mode(scan, bitmask)
 
                 self._on_transition(KeyTransitionRecord(
                     from_scan=self._last_scan,
                     to_scan=scan,
-                    from_key_name=self._last_key_name or "",
-                    to_key_name=event.key_name,
-                    delay_ms=delay,
                     typing_mode=mode,
                     t_ns=event.t_ns,
                 ))
 
             self._last_scan = scan
-            self._last_key_name = event.key_name
             self._last_press_t_ns = event.t_ns
 
     def process_release(self, event: RawKeyRelease):
@@ -163,21 +164,15 @@ class KeyboardProcessor:
         scan = event.scan_code
         is_mod = scan in MODIFIER_SCANS
 
-        # Retrieve press context (vkey, layout, modifiers stored on press)
-        vkey, active_layout, modifier_json = self._press_context.pop(scan, (0, "", "{}"))
+        # Retrieve modifier bitmask stored at press time
+        modifier_bitmask = self._press_context.pop(scan, 0)
 
         # Emit keystroke record for every key release
         self._on_keystroke(KeystrokeRecord(
             scan_code=scan,
-            vkey=vkey,
-            key_name=event.key_name,
             press_duration_ms=event.press_duration_ms,
-            modifier_state=modifier_json,
-            active_layout=active_layout,
-            hand=infer_hand(scan),
-            finger=infer_finger(scan),
+            modifier_state=modifier_bitmask,
             t_ns=event.t_ns,
-            timestamp=wall_clock_iso(),
         ))
 
         # Shortcut detection: if a modifier is released and we had a main key
@@ -203,25 +198,10 @@ class KeyboardProcessor:
 
         main_scan = self._shortcut_main_scan
         main_press_t = self._shortcut_main_t_ns
-        main_name = self._shortcut_main_name
-
-        # Build shortcut name
-        mod_names = []
-        for ms in sorted(self._active_modifiers.keys()):
-            if ms in (0x1D, 0xE01D):
-                mod_names.append("Ctrl")
-            elif ms in (0x38, 0xE038):
-                mod_names.append("Alt")
-            elif ms in (0x2A, 0x36):
-                mod_names.append("Shift")
-            elif ms in (0x5B, 0x5C):
-                mod_names.append("Win")
-        mod_names = list(dict.fromkeys(mod_names))  # Deduplicate
 
         # Earliest modifier press
         earliest_mod_t = min(self._active_modifiers.values())
 
-        shortcut_name = "+".join(mod_names + [main_name])
         mod_to_main = ns_to_ms(main_press_t - earliest_mod_t)
 
         # Determine release order and timing from tracked release events
@@ -242,21 +222,17 @@ class KeyboardProcessor:
             total = ns_to_ms(mod_release_t - earliest_mod_t)
 
         self._on_shortcut(ShortcutRecord(
-            shortcut_name=shortcut_name,
             modifier_scans=json.dumps(list(self._active_modifiers.keys())),
             main_scan=main_scan,
-            main_key_name=main_name,
             modifier_to_main_ms=max(0, mod_to_main),
             main_hold_ms=max(0, main_hold),
             overlap_ms=max(0, overlap),
             total_ms=max(0, total),
             release_order=release_order,
             t_ns=int(earliest_mod_t),
-            timestamp=wall_clock_iso(),
         ))
 
         # Reset shortcut tracking
         self._shortcut_main_scan = None
         self._shortcut_main_t_ns = 0
-        self._shortcut_main_name = ""
         self._shortcut_main_release_t_ns = None

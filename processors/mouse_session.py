@@ -15,11 +15,10 @@ State machine:
 import math
 import logging
 from typing import Optional, Callable
-from datetime import datetime
 
 from models.events import RawMouseMove, RawMouseClick, RawMouseScroll
 from models.sessions import MovementSession, PathPoint
-from utils.timing import ns_to_ms, interval_ms
+from utils.timing import interval_ms
 import config
 
 logger = logging.getLogger(__name__)
@@ -129,7 +128,7 @@ class MouseSessionDetector:
         start = points[0]
         end = points[-1]
 
-        # Euclidean distance
+        # Euclidean distance — used only for minimum distance filter
         dx = end.x - start.x
         dy = end.y - start.y
         distance = math.sqrt(dx * dx + dy * dy)
@@ -138,18 +137,8 @@ class MouseSessionDetector:
         if distance < config.MIN_SESSION_DISTANCE_PX:
             return
 
-        # Path length (sum of segments) — always from ALL points
-        path_len = 0.0
-        for i in range(1, len(points)):
-            sdx = points[i].x - points[i - 1].x
-            sdy = points[i].y - points[i - 1].y
-            path_len += math.sqrt(sdx * sdx + sdy * sdy)
-
         # Downsample path points if configured
         stored_points = self._downsample(points)
-
-        duration = ns_to_ms(end.t_ns - start.t_ns)
-        now = datetime.now()
 
         # Generate app-controlled movement ID: session * 1_000_000 + seq
         self._movement_seq += 1
@@ -162,15 +151,9 @@ class MouseSessionDetector:
             end_x=end.x,
             end_y=end.y,
             end_event=end_event,
-            duration_ms=duration,
-            distance_px=distance,
-            path_length_px=path_len,
-            point_count=len(stored_points),
+            start_t_ns=start.t_ns,
+            end_t_ns=end.t_ns,
             path_points=stored_points,
-            hour_of_day=now.hour,
-            day_of_week=now.weekday(),
-            recording_session_id=self._recording_session_id,
-            timestamp=now.isoformat(),
         )
 
         self._last_completed_movement_id = movement_id

@@ -16,7 +16,7 @@ from typing import Optional, Callable
 
 from models.events import RawMouseClick
 from models.sessions import ClickSequence, SingleClick
-from utils.timing import ns_to_ms, interval_ms, wall_clock_iso
+from utils.timing import ns_to_ms, interval_ms
 import config
 
 logger = logging.getLogger(__name__)
@@ -40,8 +40,6 @@ class ClickProcessor:
 
         # Current click being built (down → up)
         self._current_down_t_ns: int = 0
-        self._current_down_x: int = 0
-        self._current_down_y: int = 0
         self._current_button: Optional[str] = None
 
     def process_click(self, event: RawMouseClick):
@@ -80,8 +78,6 @@ class ClickProcessor:
             self._finalize_sequence()
 
         self._current_down_t_ns = event.t_ns
-        self._current_down_x = event.x
-        self._current_down_y = event.y
         self._current_button = event.button
 
     def _handle_up(self, event: RawMouseClick):
@@ -91,22 +87,15 @@ class ClickProcessor:
 
         press_duration = ns_to_ms(event.t_ns - self._current_down_t_ns)
 
-        # Calculate delay since previous click in sequence
-        delay = 0.0
+        # Check if gap since last click exceeds sequence threshold
         if self._pending_clicks and self._last_click_up_t_ns > 0:
             gap = interval_ms(self._last_click_up_t_ns, self._current_down_t_ns)
             if gap > config.CLICK_SEQUENCE_GAP_MS:
                 # Too long since last click — finalize old sequence first
                 self._finalize_sequence()
-                delay = 0.0
-            else:
-                delay = gap
 
         click = SingleClick(
-            x=self._current_down_x,
-            y=self._current_down_y,
             press_duration_ms=press_duration,
-            delay_since_prev_ms=delay,
             t_ns=self._current_down_t_ns,
         )
 
@@ -120,19 +109,10 @@ class ClickProcessor:
         if not self._pending_clicks:
             return
 
-        clicks = self._pending_clicks
-        first = clicks[0]
-        last = clicks[-1]
-
-        total_dur = ns_to_ms(last.t_ns - first.t_ns) + last.press_duration_ms
-
         seq = ClickSequence(
             button=self._pending_button,
-            click_count=len(clicks),
-            clicks=clicks,
-            total_duration_ms=total_dur,
+            clicks=self._pending_clicks,
             movement_id=None,  # Set by processor if linked to a movement
-            timestamp=wall_clock_iso(),
         )
 
         self._pending_clicks = []

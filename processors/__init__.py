@@ -10,7 +10,6 @@ for the dashboard display. No database reads — all stats from RAM.
 """
 
 import ctypes
-import json
 import queue
 import threading
 import logging
@@ -32,7 +31,7 @@ from processors.keyboard_processor import (
     LETTER_SCANS, NUMBER_ROW_SCANS, WHITESPACE_SCANS, CAPSLOCK_SCAN,
 )
 from database.writer import DatabaseWriter
-from utils.timing import now_ns, wall_clock_iso
+from utils.timing import now_ns
 from utils.stats_tracker import StatsTracker
 
 logger = logging.getLogger(__name__)
@@ -80,6 +79,7 @@ class EventProcessor:
         )
         self._drag_det = DragDetector(
             on_drag_complete=self._on_drag,
+            recording_session_id=recording_session_id,
         )
         self._kb_proc = KeyboardProcessor(
             on_keystroke=self._on_keystroke,
@@ -170,17 +170,12 @@ class EventProcessor:
         elif isinstance(event, RawMouseScroll):
             self._mouse_session.process_scroll(event)
             self.stats.increment("scrolls")
-            # Also record individual scroll event
-            direction = "up" if event.dy > 0 else "down" if event.dy < 0 else \
-                        "right" if event.dx > 0 else "left"
             self._db.put(ScrollEvent(
                 movement_id=self._mouse_session.last_completed_movement_id,
-                direction=direction,
                 delta=event.dy if event.dy != 0 else event.dx,
                 x=event.x,
                 y=event.y,
                 t_ns=event.t_ns,
-                timestamp=wall_clock_iso(),
             ))
 
         elif isinstance(event, RawKeyPress):
@@ -197,19 +192,20 @@ class EventProcessor:
 
     def _on_click_sequence(self, seq: ClickSequence):
         s = self.stats
-        s.increment("clicks", seq.click_count)
+        click_count = len(seq.clicks)
+        s.increment("clicks", click_count)
 
         # Button breakdown
         button_key = f"{seq.button}_clicks"
         if button_key in s._totals:
-            s.increment(button_key, seq.click_count)
+            s.increment(button_key, click_count)
 
         # Sequence type breakdown
-        if seq.click_count == 2:
+        if click_count == 2:
             s.increment("double_clicks")
-        elif seq.click_count == 3:
+        elif click_count == 3:
             s.increment("triple_clicks")
-        elif seq.click_count > 3:
+        elif click_count > 3:
             s.increment("spam_clicks")
 
         seq.movement_id = self._mouse_session.last_completed_movement_id
@@ -248,10 +244,9 @@ class EventProcessor:
     def _classify_keystroke(self, rec: KeystrokeRecord) -> str:
         """Classify a non-modifier keystroke into a stats category."""
         scan = rec.scan_code
-        modifier_state = json.loads(rec.modifier_state)
 
-        # Shortcut: Ctrl/Alt/Win held
-        if any(modifier_state.get(m) for m in ("ctrl", "alt", "win")):
+        # Shortcut: Ctrl (bit0), Alt (bit1), or Win (bit3) held
+        if rec.modifier_state & 0b1011:
             return "other_keys"  # Shortcut keystrokes go to Other
 
         # Numpad
@@ -262,9 +257,9 @@ class EventProcessor:
         if scan in NUMBER_ROW_SCANS:
             return "number_keys"
 
-        # Letter keys — upper vs lower
+        # Letter keys — upper vs lower (bit2=Shift)
         if scan in LETTER_SCANS:
-            shift_held = modifier_state.get("shift", False)
+            shift_held = bool(rec.modifier_state & 0b0100)
             is_upper = shift_held ^ self._caps_lock
             return "upper_keys" if is_upper else "lower_keys"
 

@@ -4,15 +4,15 @@ Processed record data classes — produced by processors, consumed by DB writer.
 Each record type has a write_to_db(conn) method that performs the actual
 INSERT into the appropriate SQLite table(s).
 
-Path points use delta encoding: seq=0 stores absolute (x, y, t_ns),
-seq>0 stores deltas from the previous point (dx, dy, dt_ns).
-Post-processing reconstructs absolute values via cumulative sum.
-Metadata key 'path_encoding'='delta_v1' signals this to readers.
+Path points use delta encoding: seq=0 stores absolute (x, y),
+seq>0 stores deltas from the previous point (dx, dy).
+No t_ns stored per point — timing reconstructed in post-processing as:
+    point_t_ns[i] = start_t_ns + i * (end_t_ns - start_t_ns) // (N - 1)
+Metadata key 'path_encoding'='delta_v2' signals this schema to readers.
 """
 
 from dataclasses import dataclass, field
 from typing import List, Optional
-import math
 
 
 # ─────────────────────────────────────────────────────────────
@@ -24,26 +24,27 @@ class PathPoint:
     """Single coordinate in a mouse path or drag path."""
     x: int
     y: int
-    t_ns: int
+    t_ns: int   # Internal use only — NOT written to DB; used for downsampling
+                # and to extract start_t_ns / end_t_ns on the movement/drag.
 
 
 def _delta_encode_points(parent_id: int, points: List[PathPoint]) -> list[tuple]:
     """
     Delta-encode a list of PathPoints for DB storage.
 
-    Returns list of (parent_id, seq, x_or_dx, y_or_dy, t_ns_or_dt_ns) tuples.
+    Returns list of (parent_id, seq, x_or_dx, y_or_dy) tuples.
     First point (seq=0): absolute values.
     Subsequent points: delta from previous point.
+    No t_ns — reconstructed from movement/drag start_t_ns + end_t_ns.
     """
     if not points:
         return []
-    rows = [(parent_id, 0, points[0].x, points[0].y, points[0].t_ns)]
+    rows = [(parent_id, 0, points[0].x, points[0].y)]
     for i in range(1, len(points)):
         rows.append((
             parent_id, i,
             points[i].x - points[i - 1].x,
             points[i].y - points[i - 1].y,
-            points[i].t_ns - points[i - 1].t_ns,
         ))
     return rows
 
@@ -56,12 +57,15 @@ def _delta_encode_points(parent_id: int, points: List[PathPoint]) -> list[tuple]
 class MovementSession:
     """
     Complete mouse movement from first move to end event.
-    Contains the full path (list of PathPoints) plus summary metrics.
+    Contains the full path (list of PathPoints) plus bookend timestamps.
 
     movement_id is app-generated: session_num * 1_000_000 + seq.
     This makes IDs globally unique across DB files and allows the
     processor to link clicks/scrolls to their preceding movement
     without waiting for DB auto-increment.
+
+    start_t_ns / end_t_ns are perf_counter_ns bookends. All per-point
+    timing is reconstructed in post-processing — no t_ns stored per point.
     """
     _db_target = "mouse"
 
@@ -71,32 +75,22 @@ class MovementSession:
     end_x: int
     end_y: int
     end_event: str              # "left_click", "right_click", "scroll_up", "idle", etc.
-    duration_ms: float
-    distance_px: float          # Euclidean start→end
-    path_length_px: float       # Sum of all segments
-    point_count: int
+    start_t_ns: int
+    end_t_ns: int
     path_points: List[PathPoint]
-    hour_of_day: int            # 0-23
-    day_of_week: int            # 0=Monday, 6=Sunday
-    recording_session_id: int
-    timestamp: str              # ISO wall clock
 
     def write_to_db(self, conn):
         cur = conn.cursor()
         cur.execute(
             """INSERT INTO movements
-               (id, start_x, start_y, end_x, end_y, end_event, duration_ms,
-                distance_px, path_length_px, point_count, hour_of_day,
-                day_of_week, recording_session_id, timestamp)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               (id, start_x, start_y, end_x, end_y, end_event, start_t_ns, end_t_ns)
+               VALUES (?,?,?,?,?,?,?,?)""",
             (self.movement_id, self.start_x, self.start_y, self.end_x,
-             self.end_y, self.end_event, self.duration_ms, self.distance_px,
-             self.path_length_px, self.point_count, self.hour_of_day,
-             self.day_of_week, self.recording_session_id, self.timestamp)
+             self.end_y, self.end_event, self.start_t_ns, self.end_t_ns)
         )
         if self.path_points:
             cur.executemany(
-                "INSERT INTO path_points (movement_id, seq, x, y, t_ns) VALUES (?,?,?,?,?)",
+                "INSERT INTO path_points (movement_id, seq, x, y) VALUES (?,?,?,?)",
                 _delta_encode_points(self.movement_id, self.path_points),
             )
 
@@ -104,10 +98,7 @@ class MovementSession:
 @dataclass(slots=True)
 class SingleClick:
     """One click within a click sequence."""
-    x: int
-    y: int
     press_duration_ms: float
-    delay_since_prev_ms: float  # 0.0 for first click in sequence
     t_ns: int
 
 
@@ -120,28 +111,21 @@ class ClickSequence:
     _db_target = "mouse"
 
     button: str                     # "left", "right", "middle"
-    click_count: int
     clicks: List[SingleClick]
-    total_duration_ms: float        # First click start → last click end
     movement_id: Optional[int]      # Preceding movement (set after movement is written)
-    timestamp: str
 
     def write_to_db(self, conn):
         cur = conn.cursor()
         cur.execute(
-            """INSERT INTO click_sequences
-               (movement_id, button, click_count, total_duration_ms, x, y, timestamp)
-               VALUES (?,?,?,?,?,?,?)""",
-            (self.movement_id, self.button, self.click_count,
-             self.total_duration_ms,
-             self.clicks[0].x, self.clicks[0].y, self.timestamp)
+            "INSERT INTO click_sequences (movement_id, button) VALUES (?,?)",
+            (self.movement_id, self.button)
         )
         seq_id = cur.lastrowid
         cur.executemany(
             """INSERT INTO click_details
-               (sequence_id, seq, x, y, press_duration_ms, delay_since_prev_ms, t_ns)
-               VALUES (?,?,?,?,?,?,?)""",
-            [(seq_id, i, c.x, c.y, c.press_duration_ms, c.delay_since_prev_ms, c.t_ns)
+               (sequence_id, seq, press_duration_ms, t_ns)
+               VALUES (?,?,?,?)""",
+            [(seq_id, i, c.press_duration_ms, c.t_ns)
              for i, c in enumerate(self.clicks)]
         )
 
@@ -151,29 +135,27 @@ class DragRecord:
     """Click-hold-move-release operation."""
     _db_target = "mouse"
 
+    drag_id: int                # App-generated: session * 1_000_000 + seq
     button: str
     start_x: int
     start_y: int
-    end_x: int
-    end_y: int
-    duration_ms: float
+    start_t_ns: int
+    end_t_ns: int
     path_points: List[PathPoint]
-    timestamp: str
 
     def write_to_db(self, conn):
         cur = conn.cursor()
         cur.execute(
             """INSERT INTO drags
-               (button, start_x, start_y, end_x, end_y, duration_ms, point_count, timestamp)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (self.button, self.start_x, self.start_y, self.end_x, self.end_y,
-             self.duration_ms, len(self.path_points), self.timestamp)
+               (id, button, start_x, start_y, start_t_ns, end_t_ns)
+               VALUES (?,?,?,?,?,?)""",
+            (self.drag_id, self.button, self.start_x, self.start_y,
+             self.start_t_ns, self.end_t_ns)
         )
-        drag_id = cur.lastrowid
         if self.path_points:
             cur.executemany(
-                "INSERT INTO drag_points (drag_id, seq, x, y, t_ns) VALUES (?,?,?,?,?)",
-                _delta_encode_points(drag_id, self.path_points),
+                "INSERT INTO drag_points (drag_id, seq, x, y) VALUES (?,?,?,?)",
+                _delta_encode_points(self.drag_id, self.path_points),
             )
 
 
@@ -183,20 +165,15 @@ class ScrollEvent:
     _db_target = "mouse"
 
     movement_id: Optional[int]  # Preceding movement (nullable)
-    direction: str              # "up", "down", "left", "right"
-    delta: int                  # Scroll amount
+    delta: int                  # Scroll amount (positive=up/right, negative=down/left)
     x: int
     y: int
     t_ns: int
-    timestamp: str
 
     def write_to_db(self, conn):
         conn.execute(
-            """INSERT INTO scrolls
-               (movement_id, direction, delta, x, y, t_ns, timestamp)
-               VALUES (?,?,?,?,?,?,?)""",
-            (self.movement_id, self.direction, self.delta,
-             self.x, self.y, self.t_ns, self.timestamp)
+            "INSERT INTO scrolls (movement_id, delta, x, y, t_ns) VALUES (?,?,?,?,?)",
+            (self.movement_id, self.delta, self.x, self.y, self.t_ns)
         )
 
 
@@ -210,25 +187,16 @@ class KeystrokeRecord:
     _db_target = "keyboard"
 
     scan_code: int
-    vkey: int                   # Virtual key code (layout-dependent)
-    key_name: str               # For human readability only
     press_duration_ms: float
-    modifier_state: str         # JSON string
-    active_layout: str          # Keyboard layout ID at time of press
-    hand: str                   # "left", "right", "unknown"
-    finger: str                 # "pinky", "ring", "middle", "index", "thumb", "unknown"
+    modifier_state: int         # Bitmask: bit0=Ctrl, bit1=Alt, bit2=Shift, bit3=Win
     t_ns: int
-    timestamp: str
 
     def write_to_db(self, conn):
         conn.execute(
             """INSERT INTO keystrokes
-               (scan_code, vkey, key_name, press_duration_ms, modifier_state,
-                active_layout, hand, finger, t_ns, timestamp)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (self.scan_code, self.vkey, self.key_name, self.press_duration_ms,
-             self.modifier_state, self.active_layout, self.hand, self.finger,
-             self.t_ns, self.timestamp)
+               (scan_code, press_duration_ms, modifier_state, t_ns)
+               VALUES (?,?,?,?)""",
+            (self.scan_code, self.press_duration_ms, self.modifier_state, self.t_ns)
         )
 
 
@@ -239,20 +207,15 @@ class KeyTransitionRecord:
 
     from_scan: int
     to_scan: int
-    from_key_name: str          # For readability
-    to_key_name: str            # For readability
-    delay_ms: float
     typing_mode: str            # "text", "shortcut", "numpad", "code"
     t_ns: int
 
     def write_to_db(self, conn):
         conn.execute(
             """INSERT INTO key_transitions
-               (from_scan, to_scan, from_key_name, to_key_name,
-                delay_ms, typing_mode, t_ns)
-               VALUES (?,?,?,?,?,?,?)""",
-            (self.from_scan, self.to_scan, self.from_key_name,
-             self.to_key_name, self.delay_ms, self.typing_mode, self.t_ns)
+               (from_scan, to_scan, typing_mode, t_ns)
+               VALUES (?,?,?,?)""",
+            (self.from_scan, self.to_scan, self.typing_mode, self.t_ns)
         )
 
 
@@ -261,29 +224,24 @@ class ShortcutRecord:
     """Keyboard shortcut with full timing profile."""
     _db_target = "keyboard"
 
-    shortcut_name: str          # "Ctrl+C", "Alt+Tab", etc.
     modifier_scans: str         # JSON array of modifier scan codes
     main_scan: int              # Main key scan code
-    main_key_name: str          # For readability
     modifier_to_main_ms: float  # Modifier down → main key down
     main_hold_ms: float         # Main key down → main key up
     overlap_ms: float           # Both held simultaneously
     total_ms: float             # Full execution time
     release_order: str          # "main_first" or "modifier_first"
     t_ns: int
-    timestamp: str
 
     def write_to_db(self, conn):
         conn.execute(
             """INSERT INTO shortcuts
-               (shortcut_name, modifier_scans, main_scan, main_key_name,
-                modifier_to_main_ms, main_hold_ms, overlap_ms, total_ms,
-                release_order, t_ns, timestamp)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (self.shortcut_name, self.modifier_scans, self.main_scan,
-             self.main_key_name, self.modifier_to_main_ms, self.main_hold_ms,
-             self.overlap_ms, self.total_ms, self.release_order,
-             self.t_ns, self.timestamp)
+               (modifier_scans, main_scan, modifier_to_main_ms, main_hold_ms,
+                overlap_ms, total_ms, release_order, t_ns)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (self.modifier_scans, self.main_scan, self.modifier_to_main_ms,
+             self.main_hold_ms, self.overlap_ms, self.total_ms,
+             self.release_order, self.t_ns)
         )
 
 
