@@ -16,6 +16,7 @@ delta_v3 path_point encoding:
   seq>0 : delta x, delta y; dt_us = delta_t_ns // 1000
 """
 
+import bisect
 import json
 import sqlite3
 import sys
@@ -212,6 +213,30 @@ def migrate_mouse(src_path: Path, dst_path: Path) -> None:
     total_drags = len(drags)
     log(f"  {total_drags:,} drags, streaming drag_points...")
 
+    # Build sorted lookup: (movement_start_t_ns, session_id) for session assignment.
+    # For each drag we find the nearest movement by start_t_ns — within the same
+    # perf_counter boot epoch the difference is always smaller than cross-epoch gaps.
+    mov_times = sorted(
+        (row[0], row[1])
+        for row in src.execute("""
+            SELECT pp.t_ns, m.recording_session_id
+            FROM path_points pp
+            JOIN movements m ON m.id = pp.movement_id
+            WHERE pp.seq = 0
+        """)
+    )
+
+    def find_session(start_t_ns: int) -> int:
+        pos = bisect.bisect_left(mov_times, (start_t_ns, 0))
+        candidates = []
+        if pos < len(mov_times):
+            candidates.append(mov_times[pos])
+        if pos > 0:
+            candidates.append(mov_times[pos - 1])
+        return min(candidates, key=lambda c: abs(c[0] - start_t_ns))[1]
+
+    drag_seq_per_session: dict[int, int] = {}
+
     batch_drags = []
     batch_dpts = []
     drags_processed = set()
@@ -226,14 +251,17 @@ def migrate_mouse(src_path: Path, dst_path: Path) -> None:
     def flush_drag(did: int, pts: list[tuple]) -> None:
         drag = drags[did]
         start_t_ns, end_t_ns, encoded = process_points(pts)
+        session_id = find_session(start_t_ns)
+        drag_seq_per_session[session_id] = drag_seq_per_session.get(session_id, 0) + 1
+        new_id = session_id * 1_000_000 + drag_seq_per_session[session_id]
         batch_drags.append((
-            did,
+            new_id,
             drag["button"],
             drag["start_x"], drag["start_y"],
             start_t_ns, end_t_ns,
         ))
         for seq, x, y, dt_us in encoded:
-            batch_dpts.append((did, seq, x, y, dt_us))
+            batch_dpts.append((new_id, seq, x, y, dt_us))
         drags_processed.add(did)
 
     for drag_id, seq, x, y, t_ns in cur:
@@ -256,9 +284,12 @@ def migrate_mouse(src_path: Path, dst_path: Path) -> None:
     if current_did is not None:
         flush_drag(current_did, current_dpts)
 
+    # Fallback: drags without any drag_points (assign to session 1).
     for did, drag in drags.items():
         if did not in drags_processed:
-            batch_drags.append((did, drag["button"], drag["start_x"], drag["start_y"], 0, 0))
+            drag_seq_per_session[1] = drag_seq_per_session.get(1, 0) + 1
+            new_id = 1 * 1_000_000 + drag_seq_per_session[1]
+            batch_drags.append((new_id, drag["button"], drag["start_x"], drag["start_y"], 0, 0))
 
     flush(dst,
           "INSERT INTO drags (id,button,start_x,start_y,start_t_ns,end_t_ns) VALUES (?,?,?,?,?,?)",
