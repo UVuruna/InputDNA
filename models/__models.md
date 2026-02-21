@@ -90,7 +90,7 @@ the writer which database to use.
 
 | Function | Description |
 |----------|-------------|
-| `_delta_encode_points()` | Converts a list of PathPoints to delta-encoded tuples for DB storage (seq=0 absolute, seq>0 deltas). No t_ns in output — timing reconstructed from movement/drag `start_t_ns`/`end_t_ns`. |
+| `_delta_encode_points()` | Converts a list of PathPoints to delta-encoded tuples for DB storage (seq=0 absolute, seq>0 deltas). Each point includes `dt_us` (µs since previous point; seq=0 has dt_us=0). Full timing: `t_ns[0]=start_t_ns`, `t_ns[i]=t_ns[i-1]+dt_us[i]*1000`. |
 
 <a id="data-flow"></a>
 
@@ -112,13 +112,13 @@ flowchart LR
 
 | Decision | Rationale |
 |----------|-----------|
-| `PathPoint.t_ns` kept in model | Used internally for downsampling and to extract `start_t_ns`/`end_t_ns` — but NOT written to DB |
-| No `t_ns` per path point in DB | Timing reconstructed as `start_t_ns + i × (end_t_ns - start_t_ns) / (N-1)` — more accurate than jittered per-point timestamps from WH_MOUSE_LL |
+| `PathPoint.t_ns` kept in model | Used for downsampling, computing `dt_us` between points, and extracting `start_t_ns`/`end_t_ns` — stored indirectly as `dt_us` deltas |
+| `dt_us` per path point, not `t_ns` | Delta µs is compact (~2 bytes at 500 Hz) and preserves the actual velocity profile (acceleration/deceleration). Absolute `t_ns` would be 8 bytes each; uniform reconstruction from start/end destroys velocity information |
 | App-generated movement/drag IDs | Format `session_id × 1_000_000 + seq` — processor knows ID before DB write, links clicks/drags to sessions immediately |
 | `modifier_state` as `int` bitmask | `bit0=Ctrl, bit1=Alt, bit2=Shift, bit3=Win` — 1 byte vs ~62-byte JSON string per keystroke |
 | Derivable fields removed | `key_name`, `hand`, `finger`, `vkey`, `active_layout`, `delay_ms`, `duration_ms`, `click_count`, `direction` — all computable in post-processing |
 
-> **Schema version:** `path_encoding=delta_v2` in mouse.db metadata table.
+> **Schema version:** `path_encoding=delta_v3` in mouse.db metadata table.
 > See [docs/08-schema-optimization.md](../docs/08-schema-optimization.md) for full rationale.
 
 > **Note:** Raw events are lightweight and short-lived (queue transit only).

@@ -39,7 +39,7 @@ Root cause analysis:
 The original schema stores several categories of redundant data:
 
 1. **Auto-increment `id` columns** on path_points and drag_points — these tables already have a natural composite key `(movement_id, seq)` or `(drag_id, seq)`.
-2. **Per-point timestamps** (`t_ns`) on path_points and drag_points — these capture OS scheduling jitter, not hardware timing. Hardware mouse polling is constant (500 Hz = 2ms). Timing is accurately reconstructable from movement start/end.
+2. **Per-point absolute timestamps** (`t_ns`) on path_points and drag_points — replaced with compact `dt_us` (delta microseconds from previous point), which preserves the actual velocity profile at ~2 bytes per point instead of 8.
 3. **Computed/derivable columns** — distance, path_length, point_count, hour_of_day, day_of_week, delay_since_prev_ms, direction, key_name, hand, finger, etc.
 4. **JSON modifier state** — stored as a ~62-byte text string instead of a 4-bit integer bitmask.
 
@@ -49,34 +49,25 @@ The original schema stores several categories of redundant data:
 
 ## Storage Analysis
 
-### Why `t_ns` per path_point is not needed
+### Why `dt_us` per path_point instead of absolute `t_ns`
 
-Mouse hardware sends position reports at exactly 500 Hz (2ms intervals). This is enforced by the USB polling rate — it does not vary with movement speed or system load.
+`WH_MOUSE_LL` fires an event only when the cursor position changes (integer pixel). At 500 Hz, the OS sends a hardware poll every 2ms, but our hook callback only fires if `x` or `y` actually changed. A slow, deliberate movement may produce only 10 position changes in 231ms — those 10 events are spread non-uniformly across the time window.
 
-What DOES vary: the timestamp captured by `perf_counter_ns()` in our callback. This reflects OS scheduling jitter (when our thread received the event), not when the hardware sent it. This jitter is random noise — not a behavioral signal.
+This means the velocity profile (acceleration → peak speed → deceleration) is encoded in the **timing between consecutive position changes**, not just in the spatial deltas. A uniform interpolation from start/end would make every movement look like constant-speed motion — robotic, not human.
 
-Because we use `WH_MOUSE_LL` (Windows low-level mouse hook), every hardware event is delivered — none are dropped. This means:
-- Point count = hardware reports received = exact multiple of polling interval
-- Timing can be reconstructed as a linear interpolation between anchored start and end times
-- This is **more accurate** than the jitter-noisy per-point timestamps
+**`dt_us`** stores the actual elapsed microseconds since the previous point:
+- `seq=0`: `dt_us=0` (timing anchored by `start_t_ns` in the parent movement)
+- `seq>0`: `dt_us = (t_ns[i] - t_ns[i-1]) // 1000`
 
+Full timing reconstruction:
 ```
-path_point timing (reconstruction):
-  point_t_ns[i] = start_t_ns + i × (end_t_ns - start_t_ns) / (N - 1)
-
-Where N = total number of points in this movement.
+t_ns[0] = start_t_ns
+t_ns[i] = t_ns[i-1] + dt_us[i] * 1000
 ```
 
-### Why acceleration is captured without t_ns
+**Why not keep absolute `t_ns`?** Delta encoding is far more compact. At 500 Hz, typical `dt_us ≈ 2000` → 2 bytes in SQLite varint. Absolute `t_ns` values (~1.7×10¹⁸) always require 8 bytes.
 
-Acceleration and deceleration are visible in the spatial deltas (Δx, Δy) between consecutive points. Since all points are at equal time intervals (1/polling_rate), the spacing of position deltas encodes velocity directly:
-
-```
-velocity at point i ≈ sqrt(x[i]² + y[i]²) × polling_rate   (pixels/sec)
-acceleration ≈ velocity[i] - velocity[i-1]
-```
-
-No per-point timestamp needed.
+**WH_MOUSE_LL jitter:** `perf_counter_ns()` is called at callback time, so each timestamp includes OS scheduling latency (±100–500 µs). This jitter is present in both consecutive timestamps, so the delta partially cancels it — the velocity shape is preserved even with per-point noise.
 
 ---
 
@@ -96,8 +87,8 @@ No per-point timestamp needed.
 **Keystone change — `path_points` and `drag_points`:**
 
 Remove `id` (auto-increment) and use `(movement_id, seq)` as composite primary key.
-Remove `t_ns` (reconstructable from movement timing).
-Result: 4 columns instead of 6, ~30% smaller per row.
+Replace absolute `t_ns` with `dt_us` (delta microseconds from previous point).
+Result: 5 columns instead of 6, similar row size but with actual velocity profile preserved.
 
 **Modifier state encoding:**
 
@@ -175,20 +166,23 @@ CREATE TABLE path_points (
     seq          INTEGER NOT NULL,
     x            INTEGER NOT NULL,   -- delta from previous point (seq > 0), absolute for seq = 0
     y            INTEGER NOT NULL,   -- delta from previous point (seq > 0), absolute for seq = 0
+    dt_us        INTEGER NOT NULL,   -- µs since previous point; seq=0 always 0
     PRIMARY KEY (movement_id, seq)
 );
 ```
 
 **Removed columns:**
 
-| Removed | Derivation |
+| Removed | Replaced by |
 |---------|-----------|
 | `id` | `(movement_id, seq)` is a unique natural key |
-| `t_ns` | `start_t_ns + seq × (end_t_ns - start_t_ns) / (N - 1)` |
+| `t_ns` (absolute) | `dt_us` delta — compact and preserves velocity profile |
 
-**Delta encoding** (unchanged from current): `seq = 0` stores absolute `(x, y)`. All subsequent rows store `(Δx, Δy)` — the difference from the previous point. Small integer deltas use 1–2 bytes in SQLite's variable-length integer encoding vs 4 bytes for absolute coordinates.
+**Delta encoding:** `seq = 0` stores absolute `(x, y)`, `dt_us=0`. All subsequent rows store `(Δx, Δy)` and `dt_us = µs since previous point`. Small integer deltas use 1–2 bytes in SQLite's variable-length integer encoding.
 
-> **Metadata key `path_encoding`** in mouse.db metadata table is updated from `delta_v1` to `delta_v2` to signal the removed `t_ns` column to post-processing readers.
+**Timing reconstruction:** `t_ns[0] = start_t_ns`, `t_ns[i] = t_ns[i-1] + dt_us[i] * 1000`
+
+> **Metadata key `path_encoding`** in mouse.db metadata table is updated to `delta_v3` to signal the new `dt_us` column to post-processing readers.
 
 ---
 
@@ -202,13 +196,14 @@ Same optimization as path_points.
 CREATE TABLE drag_points (
     drag_id  INTEGER NOT NULL REFERENCES drags(id),
     seq      INTEGER NOT NULL,
-    x        INTEGER NOT NULL,
-    y        INTEGER NOT NULL,
+    x        INTEGER NOT NULL,   -- delta from previous point (seq > 0), absolute for seq = 0
+    y        INTEGER NOT NULL,   -- delta from previous point (seq > 0), absolute for seq = 0
+    dt_us    INTEGER NOT NULL,   -- µs since previous point; seq=0 always 0
     PRIMARY KEY (drag_id, seq)
 );
 ```
 
-**Removed:** `id`, `t_ns`. Timing reconstruction uses `drags.start_t_ns` and `drags.end_t_ns`.
+**Removed:** `id`. Absolute `t_ns` replaced with `dt_us`. Timing reconstruction: `t_ns[0]=drags.start_t_ns`, `t_ns[i]=t_ns[i-1]+dt_us[i]*1000`.
 
 ---
 
@@ -437,10 +432,14 @@ def t_ns_to_wall_clock(t_ns, session):
     return datetime.fromisoformat(session.started_at) + timedelta(microseconds=offset_ns / 1000)
 
 # Path point timing (path_points and drag_points)
-def path_point_time(movement, seq, total_point_count):
-    if total_point_count == 1:
-        return movement.start_t_ns
-    return movement.start_t_ns + seq * (movement.end_t_ns - movement.start_t_ns) // (total_point_count - 1)
+# dt_us is stored per point (seq=0 has dt_us=0, anchored by start_t_ns)
+def path_point_times(movement, path_points):
+    t_ns = movement.start_t_ns
+    times = [t_ns]
+    for pt in path_points[1:]:
+        t_ns += pt.dt_us * 1000
+        times.append(t_ns)
+    return times
 ```
 
 ### Mouse derivations
@@ -532,4 +531,4 @@ Files that must change when implementing this schema:
 
 **Not changed:** `listeners/`, `utils/`, `ui/`, `main.py`, `config.py`
 
-**Existing databases:** Schema change is **not backward compatible**. Existing `.db` files use the old schema. New databases created after implementation will use the new schema. Old databases remain readable with the old schema — post-processing must detect schema version via the `path_encoding` metadata key (`delta_v1` = old, `delta_v2` = new).
+**Existing databases:** Schema change is **not backward compatible**. Existing `.db` files use the old schema. New databases created after implementation will use the new schema. Old databases remain readable with the old schema — post-processing must detect schema version via the `path_encoding` metadata key (`delta_v1` = old, `delta_v2` = intermediate, `delta_v3` = current with `dt_us`).
