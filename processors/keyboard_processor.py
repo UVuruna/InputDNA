@@ -32,6 +32,15 @@ MODIFIER_SCANS = frozenset({
     0x5B, 0x5C,    # Left/Right Win
 })
 
+# Modifiers that trigger shortcut recording when combined with a main key.
+# Shift alone is excluded — it's used for uppercase typing and punctuation symbols.
+# Ctrl+Shift+V is still captured (Ctrl qualifies; Shift is included as a co-modifier).
+_SHORTCUT_MODIFIER_SCANS = frozenset({
+    0x1D, 0xE01D,  # Left/Right Ctrl
+    0x38, 0xE038,  # Left/Right Alt
+    0x5B, 0x5C,    # Left/Right Win
+})
+
 NUMPAD_SCANS = frozenset({
     0x45,   # Num Lock
     0xE035, # Numpad /
@@ -140,10 +149,12 @@ class KeyboardProcessor:
             # Track modifier press time for shortcut timing
             self._active_modifiers[scan] = event.t_ns
         else:
-            # Check if this is a shortcut (modifier held + regular key)
-            if self._active_modifiers:
+            # Check if this is a shortcut (Ctrl/Alt/Win held + regular key)
+            # Shift alone is excluded — uppercase typing is not a shortcut
+            if any(s in _SHORTCUT_MODIFIER_SCANS for s in self._active_modifiers):
                 self._shortcut_main_scan = scan
                 self._shortcut_main_t_ns = event.t_ns
+                self._shortcut_main_release_t_ns = None  # Clear any stale value
 
             # Track transition (delay between consecutive non-modifier keys)
             if self._last_scan is not None and self._last_press_t_ns is not None:
@@ -175,8 +186,8 @@ class KeyboardProcessor:
             t_ns=event.t_ns,
         ))
 
-        # Shortcut detection: if a modifier is released and we had a main key
-        if is_mod and self._shortcut_main_scan is not None:
+        # Shortcut detection: only when a Ctrl/Alt/Win modifier is released
+        if is_mod and scan in _SHORTCUT_MODIFIER_SCANS and self._shortcut_main_scan is not None:
             self._try_emit_shortcut(event)
 
         if is_mod:
