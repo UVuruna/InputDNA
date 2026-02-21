@@ -60,11 +60,28 @@ from gui.user_settings import load_settings
 from gui.global_settings import load_globals
 
 # ── Logging setup ──────────────────────────────────────────
+_LOG_FORMAT = "%(asctime)s [%(name)-18s] %(levelname)-5s %(message)s"
+_LOG_DATEFMT = "%H:%M:%S"
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(name)-18s] %(levelname)-5s %(message)s",
-    datefmt="%H:%M:%S",
+    format=_LOG_FORMAT,
+    datefmt=_LOG_DATEFMT,
 )
+
+# File handler — rotate daily, keep 7 days of logs
+try:
+    import logging.handlers
+    config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+    _log_file = config.LOG_DIR / "inputdna.log"
+    _file_handler = logging.handlers.TimedRotatingFileHandler(
+        _log_file, when="midnight", backupCount=7, encoding="utf-8"
+    )
+    _file_handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
+    logging.getLogger().addHandler(_file_handler)
+except Exception:
+    pass  # Log to console only if file setup fails
+
 logger = logging.getLogger("main")
 
 
