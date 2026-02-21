@@ -79,8 +79,15 @@ try:
     )
     _file_handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
     logging.getLogger().addHandler(_file_handler)
-except Exception:
-    pass  # Log to console only if file setup fails
+except Exception as e:
+    # Write error to a plain text file so it's visible even without a console.
+    try:
+        config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        (config.LOG_DIR / "logging_error.txt").write_text(
+            f"File logging setup failed: {e}\n", encoding="utf-8"
+        )
+    except Exception:
+        pass
 
 logger = logging.getLogger("main")
 
