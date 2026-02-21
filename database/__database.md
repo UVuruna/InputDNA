@@ -64,8 +64,13 @@ Each user has **three separate databases**:
 
 **Key schema details:**
 
-- `movements.id` is **app-generated** (not AUTOINCREMENT): format `session * 1_000_000 + seq`. This allows the processor to know the ID before DB write and link clicks/scrolls to their preceding movement.
-- `path_points` and `drag_points` use **delta encoding**: seq=0 is absolute, seq>0 stores deltas from previous point. Metadata key `path_encoding=delta_v1` in mouse.db signals this to readers.
+- `movements.id` and `drags.id` are **app-generated** (not AUTOINCREMENT): format `session_id × 1_000_000 + seq_within_session`. This encodes the session directly (no separate `recording_session_id` FK needed) and allows the processor to know the ID before DB write.
+- `path_points` and `drag_points` use **delta encoding** with **composite primary keys**: `(movement_id, seq)` and `(drag_id, seq)` — no separate `id` column. `seq=0` stores absolute `(x, y)`, `seq>0` stores deltas. Metadata key `path_encoding=delta_v2` in mouse.db signals the new schema to readers.
+- `path_points` and `drag_points` do **not store `t_ns`** — timing is reconstructed in post-processing from `movements.start_t_ns`, `movements.end_t_ns`, and point count. See [docs/08-schema-optimization.md](../docs/08-schema-optimization.md) for the reconstruction formula.
+- `keystrokes.modifier_state` is stored as an **INTEGER bitmask** (bit 0=Ctrl, bit 1=Alt, bit 2=Shift, bit 3=Win), not a JSON string.
+- `click_details` uses composite primary key `(sequence_id, seq)` — no separate `id` column.
+
+> **Schema version:** `path_encoding=delta_v2` in mouse.db metadata table. Old databases use `delta_v1` (with `t_ns` per point and `id` columns). Post-processing must check this key before reading path data.
 
 **SQLite pragmas applied (all three databases):**
 
@@ -145,4 +150,10 @@ flowchart LR
 | Wall clock in `timestamp` columns | Human readability only — never used for calculations |
 | No indexes by default | Added later during ML prep phase if needed (INSERT-heavy workload) |
 | Delta-encoded paths | Smaller integers → fewer bytes in SQLite varint encoding (~30% savings) |
-| App-generated movement IDs | Processor knows ID before write → can link clicks/scrolls immediately |
+| App-generated movement and drag IDs | Format `session_id × 1_000_000 + seq` — encodes session, processor knows ID before write, links clicks/scrolls/drags immediately |
+| No `id` on path_points / drag_points | Composite PK `(movement_id, seq)` is already unique — auto-increment `id` was 8 bytes × 3M+ rows of pure overhead |
+| No `t_ns` on path_points / drag_points | Mouse polling is constant 500 Hz; per-point timestamps capture OS scheduling jitter (not behavioral signal); timing reconstructed from `start_t_ns + seq × (end_t_ns - start_t_ns) / (N-1)` |
+| `modifier_state` as bitmask | 4 boolean flags stored as `INTEGER` (1 byte) vs JSON string (~62 bytes) — 62× smaller per keystroke |
+| Derivable columns removed | `key_name`, `hand`, `finger`, `delay_ms`, `direction`, computed stats — all derivable in post-processing from scan codes and timestamps |
+
+> **Full optimization rationale:** [docs/08-schema-optimization.md](../docs/08-schema-optimization.md)
