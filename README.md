@@ -219,6 +219,7 @@ flowchart LR
     📝 05-ml-model-architecture.md
     📝 06-replay-engine.md
     📝 07-technical-conclusions.md
+    📝 08-schema-optimization.md
   📁 support/                         Design assets and branding
     📁 logo/                          SVG logos
     📁 adobe/                         Illustrator source files
@@ -265,6 +266,7 @@ All in `docs/`:
 | 5 | [ML Model Architecture](docs/05-ml-model-architecture.md) | Ensemble models, training pipeline |
 | 6 | [Replay Engine](docs/06-replay-engine.md) | MouseMux integration, precision timing |
 | 7 | [Technical Conclusions](docs/07-technical-conclusions.md) | Anti-detection analysis, polling rates |
+| 8 | [Schema Optimization](docs/08-schema-optimization.md) | Storage analysis, schema decisions, reconstruction guide |
 
 <details>
 <summary>Document details (click to expand)</summary>
@@ -303,6 +305,12 @@ Covers: WebSocket protocol, spin-wait timing, virtual key codes, parallel worker
 
 Key insights on detectability and implementation.
 Covers: localhost WebSocket, claim mechanism, polling rate matching, anti-bot analysis.
+
+### 8. Schema Optimization
+
+Database storage analysis and optimization rationale.
+Covers: per-table column analysis, redundant data identification, delta encoding, bitmask encoding,
+reconstruction formulas for removed columns, and storage savings projections.
 
 </details>
 
