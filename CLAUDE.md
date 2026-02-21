@@ -404,11 +404,13 @@ except SpecificError as e:
 - Complex work = multiple commits, each with its own version increment
 - Simple work = single commit
 
+**`version.py` is updated automatically** by the `commit-msg` git hook — it reads the first word of the commit message and writes it to `version.py`. The hook also aborts the commit if the message doesn't start with `X.Y.Z`.
+
 **Procedure:**
 1. Check the latest version with `git log --oneline -3`
 2. Group changes into logical commits (by topic/module)
 3. Stage specific files for each commit (`git add file1 file2`, NOT `git add .`)
-4. Commit with the next version number and descriptive message
+4. Commit with the next version number and descriptive message — hook auto-updates `version.py`
 5. Repeat for remaining groups if multiple commits are needed
 
 **Example — complex task producing 3 commits:**

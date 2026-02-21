@@ -25,6 +25,10 @@ from pathlib import Path
 # ── Paths ─────────────────────────────────────────────────────
 SETUP_DIR = Path(__file__).parent
 PROJECT_DIR = SETUP_DIR.parent
+
+# ── Version (single source of truth: version.py) ──────────────
+sys.path.insert(0, str(PROJECT_DIR))
+from version import __version__ as APP_VERSION
 DIST_DIR = PROJECT_DIR / "dist"
 BUILD_DIR = PROJECT_DIR / "build"
 
@@ -230,6 +234,7 @@ def build_installer():
         f"/DPROJECT_DIR={PROJECT_DIR}",
         f"/DDIST_DIR={DIST_DIR}",
         f"/DSETUP_DIR={SETUP_DIR}",
+        f"/DAPP_VERSION={APP_VERSION}",
         str(NSI_PATH),
     ]
 
