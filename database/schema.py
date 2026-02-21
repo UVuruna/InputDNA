@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS path_points (
     y            INTEGER NOT NULL,
     dt_us        INTEGER NOT NULL,
     PRIMARY KEY (movement_id, seq)
-);
+) WITHOUT ROWID;
 
 -- Click sequences (single / double / spam)
 -- movement_id: FK to movements (NULL if click without preceding movement)
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS click_details (
     press_duration_ms REAL    NOT NULL,
     t_ns              INTEGER NOT NULL,
     PRIMARY KEY (sequence_id, seq)
-);
+) WITHOUT ROWID;
 
 -- Drag operations (click-hold-move-release)
 -- id: app-generated = session_id × 1_000_000 + seq_within_session
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS drag_points (
     y        INTEGER NOT NULL,
     dt_us    INTEGER NOT NULL,
     PRIMARY KEY (drag_id, seq)
-);
+) WITHOUT ROWID;
 
 -- Scroll wheel events
 -- direction: derivable as sign(delta) in post-processing
