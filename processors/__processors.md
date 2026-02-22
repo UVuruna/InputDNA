@@ -131,6 +131,13 @@ Processes keyboard events to produce three record types:
 | `KeyTransitionRecord` | Delay between consecutive keys (scan code pairs) |
 | `ShortcutRecord` | Modifier+key combo with full timing profile, actual release order |
 
+**Shortcut timing validation:** `_try_emit_shortcut` validates all computed durations
+before emitting. Negative `main_hold` or `total` indicate stale processor state
+(impossible in correct execution) — the record is **dropped** and an `ERROR` is logged
+with full timing state for diagnosis. Negative `mod_to_main` (main key registered before
+modifier in a near-simultaneous press) is a physically plausible edge case — a `WARNING`
+is logged and the value is clamped to 0, but the record is kept.
+
 **Typing mode detection:**
 
 | Mode | Condition |

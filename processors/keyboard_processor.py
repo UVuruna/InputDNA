@@ -206,6 +206,12 @@ class KeyboardProcessor:
         if scan == self._shortcut_main_scan:
             self._shortcut_main_release_t_ns = event.t_ns
 
+    def _reset_shortcut_state(self) -> None:
+        """Clear all shortcut tracking state."""
+        self._shortcut_main_scan = None
+        self._shortcut_main_t_ns = 0
+        self._shortcut_main_release_t_ns = None
+
     def _try_emit_shortcut(self, modifier_release: RawKeyRelease):
         """Try to emit a shortcut record when a modifier is released."""
         if not self._active_modifiers and self._shortcut_main_scan is None:
@@ -214,6 +220,10 @@ class KeyboardProcessor:
         mod_scan = modifier_release.scan_code
         mod_press_t = self._active_modifiers.get(mod_scan)
         if mod_press_t is None:
+            logger.warning(
+                "Shortcut: modifier 0x%X released but not in active_modifiers — skipping",
+                mod_scan,
+            )
             return
 
         main_scan = self._shortcut_main_scan
@@ -241,18 +251,43 @@ class KeyboardProcessor:
             overlap = ns_to_ms(mod_release_t - main_press_t)
             total = ns_to_ms(mod_release_t - earliest_mod_t)
 
+        # Negative main_hold or total means stale processor state — drop the record.
+        # main_hold < 0: _shortcut_main_release_t_ns predates _shortcut_main_t_ns (impossible
+        #                in correct code — indicates stale release timestamp from prior shortcut)
+        # total < 0:     modifier released before it was pressed (impossible)
+        if main_hold < 0 or total < 0:
+            logger.error(
+                "Shortcut timing negative — stale processor state, record dropped. "
+                "modifier_scans=%s main_scan=0x%X release_order=%s "
+                "main_hold=%.3fms total=%.3fms mod_to_main=%.3fms "
+                "main_press_t=%d main_release_t=%s mod_release_t=%d earliest_mod_t=%d",
+                json.dumps(list(self._active_modifiers.keys())), main_scan, release_order,
+                main_hold, total, mod_to_main,
+                main_press_t, main_release_t, mod_release_t, earliest_mod_t,
+            )
+            self._reset_shortcut_state()
+            return
+
+        # mod_to_main < 0: main key registered before modifier (near-simultaneous press).
+        # Physically plausible — log warning and clamp, record is still valid.
+        if mod_to_main < 0:
+            logger.warning(
+                "Shortcut mod_to_main=%.3fms < 0 (near-simultaneous press, clamped to 0). "
+                "modifier_scans=%s main_scan=0x%X",
+                mod_to_main,
+                json.dumps(list(self._active_modifiers.keys())), main_scan,
+            )
+            mod_to_main = 0.0
+
         self._on_shortcut(ShortcutRecord(
             modifier_scans=json.dumps(list(self._active_modifiers.keys())),
             main_scan=main_scan,
-            modifier_to_main_ms=max(0, mod_to_main),
-            main_hold_ms=max(0, main_hold),
-            overlap_ms=max(0, overlap),
-            total_ms=max(0, total),
+            modifier_to_main_ms=mod_to_main,
+            main_hold_ms=main_hold,
+            overlap_ms=overlap,
+            total_ms=total,
             release_order=release_order,
             t_ns=int(earliest_mod_t),
         ))
 
-        # Reset shortcut tracking
-        self._shortcut_main_scan = None
-        self._shortcut_main_t_ns = 0
-        self._shortcut_main_release_t_ns = None
+        self._reset_shortcut_state()
