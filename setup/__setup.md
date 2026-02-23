@@ -19,6 +19,28 @@ Build and installation scripts for packaging InputDNA as a distributable Windows
 
 ## Files
 
+### `app_info.json` — App Metadata (Single Source of Truth)
+
+Static app metadata used by the build pipeline. **Version is not here** — it
+comes from `version.py` (auto-updated by the git `commit-msg` hook).
+
+```json
+{
+    "app_name": "InputDNA",
+    "company": "UVuruna",
+    "product_name": "InputDNA",
+    "description": "Human Input Recorder",
+    "copyright": "© 2026 UVuruna"
+}
+```
+
+Used to generate:
+- **`_version_info.py`** (at build time) — embedded in the EXE as Windows VERSIONINFO
+  resource (CompanyName, FileDescription, FileVersion, LegalCopyright, etc.)
+- **NSIS `APP_PUBLISHER`** — shown in Add/Remove Programs → Publisher column
+
+> **`_version_info.py`** is generated at build time and gitignored — never commit it.
+
 ### `build.py` — Main Build Script
 
 Orchestrates the full build pipeline:

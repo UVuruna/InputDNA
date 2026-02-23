@@ -16,9 +16,8 @@
 !include "FileFunc.nsh"
 
 ; -- App Info -----------------------------------------------------
-; APP_VERSION is passed from build.py via /DAPP_VERSION=... — never hardcode here.
+; APP_VERSION and APP_PUBLISHER are passed from build.py via /D flags — never hardcode here.
 !define APP_NAME "InputDNA"
-!define APP_PUBLISHER "UVuruna"
 !define APP_EXE "InputDNA.exe"
 
 ; Registry key for uninstall info
