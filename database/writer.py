@@ -78,6 +78,7 @@ class DatabaseWriter:
         """Stop writer, flush remaining records, close connections."""
         logger.info("Database writer stopping...")
         self._running = False
+        self._queue.put(None)  # Wake up any blocking get()
         if self._thread is not None:
             self._thread.join(timeout=10)
         logger.info(
@@ -106,9 +107,13 @@ class DatabaseWriter:
 
         try:
             while self._running or not self._queue.empty():
-                # Try to get a record (with short timeout so we can check flush timer)
+                # Short timeout when batch has items (need to respect flush interval).
+                # Long timeout when batch is empty (nothing pending — wake up on new record).
+                timeout = 0.1 if batch else self.flush_interval
                 try:
-                    record = self._queue.get(timeout=0.1)
+                    record = self._queue.get(timeout=timeout)
+                    if record is None:  # sentinel from stop()
+                        break
                     batch.append(record)
                 except queue.Empty:
                     pass
