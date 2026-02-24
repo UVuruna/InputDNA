@@ -241,6 +241,7 @@ class MainWindow(QMainWindow):
         self._system_monitor: SystemMonitor | None = None
         self._force_quit = False  # True when Quit from tray — bypass minimize
         self._system_shutting_down = False  # True on WM_QUERYENDSESSION
+        self._last_is_idle: bool | None = None  # Tray idle state — only update on change
 
         # Connect cross-thread signals (pystray and stop-worker threads)
         self._sig_show_gui.connect(self._show_window)
@@ -451,6 +452,7 @@ class MainWindow(QMainWindow):
 
     def _on_recording_stopped(self):
         """Called on Qt thread after async stop completes."""
+        self._last_is_idle = None  # Reset for next recording session
         if self._tray:
             self._tray.set_stopped()
         if self._dashboard:
@@ -493,11 +495,12 @@ class MainWindow(QMainWindow):
             idle_ns = config.IDLE_ICON_TIMEOUT_S * 1_000_000_000
             is_idle = bool(last_ns and (now_ns() - last_ns) > idle_ns)
 
-            if self._tray:
+            if self._tray and is_idle != self._last_is_idle:
                 if is_idle:
                     self._tray.set_idle()
                 else:
                     self._tray.set_recording()
+                self._last_is_idle = is_idle
 
             # Update login screen status (visible when user navigated Home)
             self._login_screen.update_recording_status(True, is_idle)
