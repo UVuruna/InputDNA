@@ -42,6 +42,11 @@ class ClickProcessor:
         self._current_down_t_ns: int = 0
         self._current_button: Optional[str] = None
 
+    @property
+    def has_pending(self) -> bool:
+        """Whether there's a pending click sequence waiting for gap timeout."""
+        return bool(self._pending_clicks)
+
     def process_click(self, event: RawMouseClick):
         """
         Process a mouse click event (press or release).

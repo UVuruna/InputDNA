@@ -115,6 +115,7 @@ class EventProcessor:
     def stop(self):
         """Stop processor, flush pending sessions."""
         self._running = False
+        self._event_queue.put(None)  # Wake up any blocking get()
         if self._thread:
             self._thread.join(timeout=5)
         # Flush any in-progress sessions
@@ -131,16 +132,22 @@ class EventProcessor:
     def _run(self):
         """Main processing loop."""
         while self._running:
+            has_pending = self._mouse_session.is_active or self._click_proc.has_pending
+            timeout = 0.05 if has_pending else None  # None = block until next event
+
             try:
-                event = self._event_queue.get(timeout=0.05)
+                event = self._event_queue.get(timeout=timeout)
+                if event is None:  # sentinel from stop()
+                    break
                 self._dispatch(event)
             except queue.Empty:
                 pass
 
-            # Check timeouts
-            t = now_ns()
-            self._mouse_session.check_idle_timeout(t)
-            self._click_proc.check_sequence_timeout(t)
+            # Check timeouts only when there's something that could time out
+            if has_pending:
+                t = now_ns()
+                self._mouse_session.check_idle_timeout(t)
+                self._click_proc.check_sequence_timeout(t)
 
     @property
     def last_event_ns(self) -> int:
