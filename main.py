@@ -8,7 +8,7 @@ GUI application flow:
 
 Thread architecture (during recording):
     Main thread ──── Qt event loop (GUI)
-    Thread 1: mouse listener (pynput hook)
+    Thread 1: mouse listener (Windows Raw Input — WM_INPUT + QPC)
     Thread 2: keyboard listener (pynput hook)
     Thread 3: event processor (dispatches events)
     Thread 4: database writer (batched inserts)

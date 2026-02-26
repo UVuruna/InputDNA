@@ -62,8 +62,9 @@ Phase 4: Replay Engine (Future)
 ```
 Main Thread ──── tray_icon (blocks until quit)
     │
-    ├── Thread 1: mouse_listener (pynput hook)
+    ├── Thread 1: mouse_listener (Windows Raw Input — WM_INPUT + QPC)
     │       └── pushes RawMouse* events to event_queue
+    │       └── feeds poll_feed(t_ns) to PollingRateEstimator on each move
     │
     ├── Thread 2: keyboard_listener (pynput hook)
     │       └── pushes RawKey* events to event_queue

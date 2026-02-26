@@ -31,8 +31,12 @@ PROJECT_DIR = SETUP_DIR.parent
 sys.path.insert(0, str(PROJECT_DIR))
 from version import __version__ as APP_VERSION
 
-# ── App metadata (single source of truth: app_info.json) ──────
-APP_INFO = json.loads((SETUP_DIR / "app_info.json").read_text(encoding="utf-8"))
+# ── App metadata ──────────────────────────────────────────────
+# Project-specific: setup/app_info.json (name, description, exe/installer names)
+# Company-level:    company.json at git root (company_name, copyright_string, etc.)
+GIT_ROOT = PROJECT_DIR.parent.parent.parent
+APP_INFO     = json.loads((SETUP_DIR  / "app_info.json").read_text(encoding="utf-8"))
+COMPANY_INFO = json.loads((GIT_ROOT   / "company.json").read_text(encoding="utf-8"))
 VERSION_INFO_PATH = SETUP_DIR / "_version_info.py"  # generated at build time, gitignored
 
 DIST_DIR = PROJECT_DIR / "dist"
@@ -75,13 +79,13 @@ def generate_version_info() -> None:
       StringTable(
         '040904B0',
         [
-          StringStruct('CompanyName',      {APP_INFO['company']!r}),
+          StringStruct('CompanyName',      {COMPANY_INFO['company_name']!r}),
           StringStruct('FileDescription',  {APP_INFO['description']!r}),
           StringStruct('FileVersion',      {ver_str!r}),
-          StringStruct('InternalName',     {APP_INFO['app_name']!r}),
-          StringStruct('LegalCopyright',   {APP_INFO['copyright']!r}),
-          StringStruct('OriginalFilename', {APP_INFO['app_name'] + '.exe'!r}),
-          StringStruct('ProductName',      {APP_INFO['product_name']!r}),
+          StringStruct('InternalName',     {APP_INFO['name']!r}),
+          StringStruct('LegalCopyright',   {COMPANY_INFO['copyright_string']!r}),
+          StringStruct('OriginalFilename', {APP_INFO['exe_name']!r}),
+          StringStruct('ProductName',      {APP_INFO['name']!r}),
           StringStruct('ProductVersion',   {ver_str!r}),
         ]
       ),
@@ -91,8 +95,8 @@ def generate_version_info() -> None:
 )
 """
     VERSION_INFO_PATH.write_text(content, encoding="utf-8")
-    print(f"Version info: {APP_INFO['company']} / {APP_INFO['product_name']} "
-          f"/ {APP_INFO['description']} / {ver_str} / {APP_INFO['copyright']}")
+    print(f"Version info: {COMPANY_INFO['company_name']} / {APP_INFO['name']} "
+          f"/ {APP_INFO['description']} / {ver_str} / {COMPANY_INFO['copyright_string']}")
 
 
 def step(msg: str):
@@ -290,7 +294,7 @@ def build_installer():
         f"/DDIST_DIR={DIST_DIR}",
         f"/DSETUP_DIR={SETUP_DIR}",
         f"/DAPP_VERSION={APP_VERSION}",
-        f"/DAPP_PUBLISHER={APP_INFO['company']}",
+        f"/DAPP_PUBLISHER={COMPANY_INFO['company_name']}",
         str(NSI_PATH),
     ]
 

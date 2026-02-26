@@ -1,7 +1,6 @@
 {
-    "app_name": "InputDNA",
-    "company": "UVuruna",
-    "product_name": "InputDNA",
+    "name": "InputDNA",
     "description": "Human Input Recorder",
-    "copyright": "© 2026 UVuruna"
+    "exe_name": "InputDNA.exe",
+    "installer_name": "InputDNA_Setup.exe"
 }
