@@ -177,7 +177,15 @@ class PollingRateEstimator:
         """
         if self._last_t_ns is not None:
             interval = t_ns - self._last_t_ns
-            if config.POLLING_RATE_MIN_INTERVAL_NS <= interval <= config.POLLING_RATE_MAX_INTERVAL_NS:
+            # After first estimate: tighten max to 3× expected interval (e.g. 6ms
+            # for 500Hz). Prevents slow-movement intervals (8ms at 500Hz) from
+            # contaminating the window and producing false re-estimates (e.g. 125Hz).
+            # Before first estimate: use wide 20ms to capture initial fast bursts.
+            if self._estimated_hz:
+                max_ns = (1_000_000_000 // self._estimated_hz) * 3
+            else:
+                max_ns = config.POLLING_RATE_MAX_INTERVAL_NS
+            if config.POLLING_RATE_MIN_INTERVAL_NS <= interval <= max_ns:
                 self._intervals_ns.append(interval)
 
         self._last_t_ns = t_ns
