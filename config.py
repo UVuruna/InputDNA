@@ -169,9 +169,10 @@ POLLING_RATE_UPDATE_INTERVAL_S = 60.0
 # Hardware interval bounds for filtering (nanoseconds).
 # Intervals outside this range are discarded before entering the window.
 #   Min = 125 μs  →  fastest possible interval at 8000 Hz (burst artifact threshold)
-#   Max = 20 ms   →  slower than 50 Hz; indicates idle gap, not a real poll interval
+#   Max = 8 ms    →  125 Hz lower bound — the slowest standard polling rate
+#                    Anything above 8ms is an idle gap between movements, not a poll interval
 POLLING_RATE_MIN_INTERVAL_NS = 125_000      # 8000 Hz upper bound
-POLLING_RATE_MAX_INTERVAL_NS = 20_000_000   # 50 Hz lower bound
+POLLING_RATE_MAX_INTERVAL_NS = 8_000_000    # 125 Hz lower bound
 
 # How often the main MouseListener logs its timing quality report.
 # Report shows inter-move interval distribution (P10/P50/P90) and % clean intervals.
