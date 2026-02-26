@@ -172,6 +172,11 @@ POLLING_RATE_UPDATE_INTERVAL_S = 60.0
 POLLING_RATE_MIN_INTERVAL_NS = 125_000      # 8000 Hz upper bound
 POLLING_RATE_MAX_INTERVAL_NS = 20_000_000   # 50 Hz lower bound
 
+# How often the main MouseListener logs its timing quality report.
+# Report shows inter-move interval distribution (P10/P50/P90) and % clean intervals.
+# Visible in logs — allows detecting timestamp jitter without reading the database.
+TIMING_QUALITY_LOG_INTERVAL_S = 300.0       # every 5 minutes
+
 # Estimated mouse polling rate (Hz). Set at runtime by the polling rate
 # estimator after login. None means not yet measured.
 # Used by settings screen to filter downsample options.

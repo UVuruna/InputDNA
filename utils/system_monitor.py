@@ -10,13 +10,16 @@ Periodically checks system settings that affect input behavior:
 On recording start, captures initial state. Then polls at a configurable
 interval, emitting SystemEventRecord only when a value changes.
 
-Polling rate is estimated separately from mouse move event timestamps
-(see estimate_polling_rate).
+Polling rate is estimated separately via PollingRateEstimator, which now uses
+Windows Raw Input (WM_INPUT) + QueryPerformanceCounter instead of the previous
+WH_MOUSE_LL (pynput) approach. Raw Input posts WM_INPUT directly to a dedicated
+message pump thread without cross-process hook delivery overhead, giving accurate
+QPC timestamps. This eliminates the false 3ms/4ms/5ms median readings that
+occurred when the hook thread was preempted at 500 Hz.
 """
 
 import ctypes
 import logging
-import statistics
 import threading
 import time
 from collections import deque
@@ -25,6 +28,7 @@ from typing import Callable, Optional
 import config
 from models.sessions import SystemEventRecord
 from utils.timing import now_ns, wall_clock_iso
+from utils.raw_input import RawInputMouseReader, RawMouseEvent
 
 logger = logging.getLogger(__name__)
 
@@ -137,25 +141,30 @@ class PollingRateEstimator:
     """
     Estimates mouse polling rate from move event timestamps.
 
+    Receives timestamps from a RawInputMouseReader (WM_INPUT + QPC), not from
+    WH_MOUSE_LL, so delivery jitter is sub-millisecond rather than several ms.
+
     Maintains a rolling window of recent inter-event intervals. Intervals
     outside the physically plausible range are discarded before entering
     the window:
-      - Below POLLING_RATE_MIN_INTERVAL_NS: burst artifacts from OS event
-        batching (appear faster than the hardware can actually poll).
-      - Above POLLING_RATE_MAX_INTERVAL_NS: idle gaps where the cursor
-        wasn't moving (not representative of the hardware poll rate).
+      - Below POLLING_RATE_MIN_INTERVAL_NS: burst artifacts (rapid-succession
+        events when the message pump catches up after a brief preemption).
+      - Above POLLING_RATE_MAX_INTERVAL_NS: idle gaps where the cursor was
+        not moving (not representative of the hardware poll rate).
 
     After the window fills, calculates using the median of stored intervals
-    and snaps to the nearest standard rate. Recalculates periodically
-    (POLLING_RATE_UPDATE_INTERVAL_S cooldown) so a changed USB report rate
-    or a bad initial estimate is eventually corrected.
+    and snaps to the nearest standard rate. Each calculation also logs a full
+    quality report (P10/P50/P90 and % clean) so anomalies are visible in logs.
 
-    Thread-safe under CPython GIL: listener thread writes, Qt thread reads
+    Recalculates periodically (POLLING_RATE_UPDATE_INTERVAL_S cooldown) so a
+    changed USB report rate or a bad initial estimate is eventually corrected.
+
+    Thread-safe under CPython GIL: reader thread writes, Qt thread reads
     estimated_hz.
     """
 
     def __init__(self, sample_count: int = config.POLLING_RATE_SAMPLE_COUNT):
-        self._sample_count = sample_count
+        self._sample_count        = sample_count
         self._intervals_ns: deque[int] = deque(maxlen=sample_count)
         self._last_t_ns: Optional[int] = None
         self._estimated_hz: Optional[int] = None
@@ -189,23 +198,44 @@ class PollingRateEstimator:
         """
         Calculate polling rate from the rolling window using median.
 
+        Logs a full quality report with P10/P50/P90 and percentage of clean
+        intervals so timing anomalies are immediately visible in logs.
+
         Returns new snapped Hz if the value changed, else None.
         """
         self._last_calculated_ns = now
         intervals = list(self._intervals_ns)
+        n = len(intervals)
         if not intervals:
             return None
 
-        median_ns = statistics.median(intervals)
-        if median_ns <= 0:
+        sorted_iv   = sorted(intervals)
+        p10_ns      = sorted_iv[n // 10]
+        p50_ns      = sorted_iv[n // 2]        # median
+        p90_ns      = sorted_iv[int(n * 0.9)]
+
+        if p50_ns <= 0:
             return None
 
-        raw_hz = round(1_000_000_000 / median_ns)
+        raw_hz  = round(1_000_000_000 / p50_ns)
         snapped = config.snap_polling_rate(raw_hz)
+
+        # "Clean" = within 1.5× the median interval (e.g. <3ms for a 500Hz mouse)
+        threshold_ns = int(p50_ns * 1.5)
+        anomalous    = sum(1 for iv in intervals if iv > threshold_ns)
+        pct_clean    = 100.0 * (n - anomalous) / n
+
         logger.info(
-            f"Mouse polling rate: raw={raw_hz} Hz → snapped={snapped} Hz "
-            f"(median={median_ns / 1e6:.3f} ms, {len(intervals)} samples)"
+            f"Mouse polling rate: raw={raw_hz} Hz → snapped={snapped} Hz | "
+            f"P10={p10_ns/1e6:.3f}ms P50={p50_ns/1e6:.3f}ms P90={p90_ns/1e6:.3f}ms | "
+            f"{n} samples, {pct_clean:.1f}% clean"
         )
+
+        if pct_clean < 95.0:
+            logger.warning(
+                f"Mouse polling rate: {100.0 - pct_clean:.1f}% of intervals "
+                f"exceed {threshold_ns/1e6:.1f}ms — timestamp jitter detected"
+            )
 
         if snapped != self._estimated_hz:
             self._estimated_hz = snapped
@@ -222,21 +252,25 @@ def start_polling_estimation(on_done: Optional[Callable[[int], None]] = None) ->
     """
     Start a continuous background listener to estimate mouse polling rate.
 
+    Uses Windows Raw Input (WM_INPUT) + QueryPerformanceCounter via
+    RawInputMouseReader. This replaces the previous pynput (WH_MOUSE_LL)
+    approach which caused false 3–5ms median readings due to cross-process
+    hook delivery jitter at 500 Hz.
+
     Runs until the returned stop() callable is called (e.g. on logout).
-    Calls on_done(hz) on the listener thread each time the estimate changes.
+    Calls on_done(hz) on the reader thread each time the estimate changes.
     Also updates config.ESTIMATED_POLLING_HZ on each change.
 
     Returns a stop() callable. Store it and call it on logout.
     """
-    from pynput import mouse as _mouse
-    from utils.timing import now_ns as _now_ns
-
-    estimator = PollingRateEstimator()
+    estimator     = PollingRateEstimator()
     _last_reported: dict = {"hz": None}
-    holder: dict = {"listener": None}
+    holder: dict  = {"reader": None}
 
-    def _on_move(x, y):
-        new_hz = estimator.add_move_timestamp(_now_ns())
+    def _on_event(ev: RawMouseEvent):
+        if ev.rel_x == 0 and ev.rel_y == 0:
+            return  # button-only event, no movement — skip
+        new_hz = estimator.add_move_timestamp(ev.t_ns)
         if new_hz is not None and new_hz != _last_reported["hz"]:
             _last_reported["hz"] = new_hz
             config.ESTIMATED_POLLING_HZ = new_hz
@@ -244,17 +278,16 @@ def start_polling_estimation(on_done: Optional[Callable[[int], None]] = None) ->
                 on_done(new_hz)
 
     def stop():
-        listener = holder.get("listener")
-        if listener is not None:
-            listener.stop()
-            holder["listener"] = None
+        reader = holder.get("reader")
+        if reader is not None:
+            reader.stop()
+            holder["reader"] = None
             logger.info("Polling rate estimation stopped")
 
-    listener = _mouse.Listener(on_move=_on_move)
-    listener.daemon = True
-    holder["listener"] = listener
-    listener.start()
-    logger.info("Polling rate estimation started (continuous background listener)")
+    reader = RawInputMouseReader(callback=_on_event)
+    reader.start()
+    holder["reader"] = reader
+    logger.info("Polling rate estimation started (Raw Input background listener)")
     return stop
 
 
