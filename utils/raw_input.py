@@ -14,9 +14,15 @@ Architecture:
     - On WM_INPUT arrival: time.perf_counter_ns() is captured as the FIRST
       operation, before any other work. This gives the earliest possible
       timestamp with ~100ns resolution (QueryPerformanceCounter under the hood).
-    - Absolute cursor position is fetched via GetCursorPos() immediately after
-      the QPC capture. RAWMOUSE.lLastX/lLastY are relative and used only to
-      detect motion, not as coordinates.
+    - Cursor position is tracked by accumulating RAWMOUSE.lLastX/lLastY from
+      each hardware report. GetCursorPos() is NOT used in the hot path because
+      it returns the OS cursor position after ALL pending reports have been
+      integrated: when the message pump is preempted for 8ms and 4 reports
+      queue up, all 4 dispatches see the same GetCursorPos value, collapsing
+      4 distinct positions into 1. Accumulating per-report deltas gives a
+      unique position for each hardware poll (500Hz at 2ms intervals).
+      Seeded once from GetCursorPos at startup; resynced on zero-movement
+      events (clicks, scrolls) to prevent long-term drift from acceleration.
 
 Multiple instances can coexist — each creates a unique HWND class name and
 receives an independent copy of every WM_INPUT from the OS.
@@ -161,10 +167,14 @@ class RawMouseEvent:
     """
     A single raw mouse event delivered by WM_INPUT.
 
-    cursor_x / cursor_y — absolute screen position from GetCursorPos() captured
-                          immediately after the QPC timestamp.
-    rel_x / rel_y       — relative movement from RAWMOUSE.lLastX/lLastY. Use
-                          only to detect motion (non-zero = cursor moved).
+    cursor_x / cursor_y — accumulated cursor position in hardware counts.
+                          Seeded from GetCursorPos() at startup, then updated
+                          by adding lLastX/lLastY for each hardware report.
+                          Each event gets a unique position (500Hz at 2ms
+                          intervals) regardless of message pump scheduling.
+                          Resynced to GetCursorPos on zero-movement events.
+    rel_x / rel_y       — relative movement from RAWMOUSE.lLastX/lLastY for
+                          this specific hardware report.
     button_flags        — usButtonFlags bitmask (which buttons changed state).
     button_data         — usButtonData. For wheel events: signed scroll delta
                           in WHEEL_DELTA units (120 per notch); stored as raw
@@ -228,6 +238,12 @@ class RawInputMouseReader:
             name=f"raw-input-{_instance_counter}",
             daemon=True,
         )
+        # Accumulated cursor position — updated from lLastX/lLastY per report.
+        # Seeded from GetCursorPos on first event; avoids GetCursorPos in hot
+        # path where it collapses 4 queued reports into one position.
+        self._cursor_x: int = 0
+        self._cursor_y: int = 0
+        self._cursor_seeded: bool = False
 
     def start(self):
         """Start the reader. Blocks until the window is registered and ready."""
@@ -274,12 +290,35 @@ class RawInputMouseReader:
             return
 
         m = raw.data.mouse
-        pt = _POINT()
-        _user32.GetCursorPos(ctypes.byref(pt))
+
+        # Update accumulated cursor position for this hardware report.
+        # Three cases:
+        #   1. Absolute device (tablet/touchscreen): coordinates are normalized
+        #      0-65535 — always resync from GetCursorPos (no batching issue).
+        #   2. First relative event, or zero-movement event (button/scroll):
+        #      resync from GetCursorPos to seed or prevent drift.
+        #   3. Normal relative movement: accumulate lLastX/lLastY directly.
+        #      This gives a unique position per hardware report even when
+        #      the message pump dispatches a burst of queued messages.
+        if m.usFlags & _MOUSE_MOVE_ABSOLUTE:
+            pt = _POINT()
+            _user32.GetCursorPos(ctypes.byref(pt))
+            self._cursor_x = pt.x
+            self._cursor_y = pt.y
+            self._cursor_seeded = True
+        elif not self._cursor_seeded or (m.lLastX == 0 and m.lLastY == 0):
+            pt = _POINT()
+            _user32.GetCursorPos(ctypes.byref(pt))
+            self._cursor_x = pt.x
+            self._cursor_y = pt.y
+            self._cursor_seeded = True
+        else:
+            self._cursor_x += m.lLastX
+            self._cursor_y += m.lLastY
 
         self._callback(RawMouseEvent(
-            cursor_x     = pt.x,
-            cursor_y     = pt.y,
+            cursor_x     = self._cursor_x,
+            cursor_y     = self._cursor_y,
             rel_x        = m.lLastX,
             rel_y        = m.lLastY,
             button_flags = m._buttons._st.usButtonFlags,
