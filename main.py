@@ -95,8 +95,9 @@ logger = logging.getLogger("main")
 class Recorder:
     """Background recording engine (no GUI, just threads)."""
 
-    def __init__(self, profile: UserProfile):
+    def __init__(self, profile: UserProfile, poll_feed=None):
         self._profile = profile
+        self._poll_feed = poll_feed
         self._user_folder = config.get_user_folder(
             profile.username, profile.surname, profile.date_of_birth,
         )
@@ -148,7 +149,7 @@ class Recorder:
         self._db_writer.start()
 
         # Start listeners
-        self._mouse_listener = MouseListener(self._event_queue)
+        self._mouse_listener = MouseListener(self._event_queue, poll_feed=self._poll_feed)
         self._mouse_listener.start()
 
         self._kb_listener = KeyboardListener(self._event_queue)
@@ -242,6 +243,8 @@ class MainWindow(QMainWindow):
         self._force_quit = False  # True when Quit from tray — bypass minimize
         self._system_shutting_down = False  # True on WM_QUERYENDSESSION
         self._last_is_idle: bool | None = None  # Tray idle state — only update on change
+        self._poll_feed = None       # Polling rate feed fn — set at login, passed to recorder
+        self._stop_polling_estimation = lambda: None
 
         # Connect cross-thread signals (pystray and stop-worker threads)
         self._sig_show_gui.connect(self._show_window)
@@ -294,9 +297,11 @@ class MainWindow(QMainWindow):
         # Set active user folder in config (uses CUSTOM_USER_DATA_DIR if set)
         config.set_active_user(profile.username, profile.surname, profile.date_of_birth)
 
-        # Start continuous polling rate estimation (background mouse listener).
-        # Returns a stop() callable — stored so we can clean up on logout.
-        self._stop_polling_estimation = start_polling_estimation(
+        # Set up polling rate estimation.
+        # Returns (feed, stop): feed(t_ns) is called by MouseListener for each
+        # move event; stop() is called on logout. No separate RawInputMouseReader
+        # is created — the mouse listener's reader is the sole source of events.
+        self._poll_feed, self._stop_polling_estimation = start_polling_estimation(
             on_done=self._on_polling_rate_estimated,
         )
         self._polling_check_timer.start(500)
@@ -368,9 +373,9 @@ class MainWindow(QMainWindow):
             self._stop_recording_sync()
 
         self._polling_check_timer.stop()
-        if hasattr(self, "_stop_polling_estimation"):
-            self._stop_polling_estimation()
-            self._stop_polling_estimation = lambda: None
+        self._stop_polling_estimation()
+        self._stop_polling_estimation = lambda: None
+        self._poll_feed = None
 
         # Reset tray to default icon (tray stays alive)
         if self._tray:
@@ -414,7 +419,7 @@ class MainWindow(QMainWindow):
         if self._recorder or not self._user:
             return
 
-        self._recorder = Recorder(self._user)
+        self._recorder = Recorder(self._user, poll_feed=self._poll_feed)
         self._recorder.start()
 
         # Update tray icon to recording state

@@ -26,6 +26,7 @@ All timestamps: perf_counter_ns (sub-microsecond, monotonic).
 import queue
 import logging
 import time
+from typing import Callable
 
 import config
 from models.events import RawMouseMove, RawMouseClick, RawMouseScroll
@@ -52,8 +53,13 @@ class MouseListener:
         ml.stop()
     """
 
-    def __init__(self, event_queue: queue.Queue):
-        self._queue   = event_queue
+    def __init__(
+        self,
+        event_queue: queue.Queue,
+        poll_feed: Callable[[int], None] | None = None,
+    ):
+        self._queue     = event_queue
+        self._poll_feed = poll_feed
         self._reader: RawInputMouseReader | None = None
 
         # Timing quality tracking — lightweight, for periodic log reports
@@ -83,6 +89,8 @@ class MouseListener:
         if ev.rel_x != 0 or ev.rel_y != 0:
             self._queue.put(RawMouseMove(x=x, y=y, t_ns=t))
             self._track_quality(t)
+            if self._poll_feed is not None:
+                self._poll_feed(t)
 
         # Button / scroll events
         flags = ev.button_flags

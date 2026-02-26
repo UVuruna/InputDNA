@@ -10,12 +10,12 @@ Periodically checks system settings that affect input behavior:
 On recording start, captures initial state. Then polls at a configurable
 interval, emitting SystemEventRecord only when a value changes.
 
-Polling rate is estimated separately via PollingRateEstimator, which now uses
-Windows Raw Input (WM_INPUT) + QueryPerformanceCounter instead of the previous
-WH_MOUSE_LL (pynput) approach. Raw Input posts WM_INPUT directly to a dedicated
-message pump thread without cross-process hook delivery overhead, giving accurate
-QPC timestamps. This eliminates the false 3ms/4ms/5ms median readings that
-occurred when the hook thread was preempted at 500 Hz.
+Polling rate is estimated via PollingRateEstimator, fed with move-event
+timestamps from the MouseListener rather than from a dedicated second
+RawInputMouseReader. Windows RegisterRawInputDevices is per-process for a
+given usage page/usage pair — a second registration overwrites the first,
+so two concurrent RawInputMouseReader instances cannot both receive events.
+The mouse listener calls poll_feed(t_ns) directly for each move event.
 """
 
 import ctypes
@@ -28,7 +28,6 @@ from typing import Callable, Optional
 import config
 from models.sessions import SystemEventRecord
 from utils.timing import now_ns, wall_clock_iso
-from utils.raw_input import RawInputMouseReader, RawMouseEvent
 
 logger = logging.getLogger(__name__)
 
@@ -248,47 +247,40 @@ class PollingRateEstimator:
         return self._estimated_hz
 
 
-def start_polling_estimation(on_done: Optional[Callable[[int], None]] = None) -> Callable[[], None]:
+def start_polling_estimation(
+    on_done: Optional[Callable[[int], None]] = None,
+) -> tuple[Callable[[int], None], Callable[[], None]]:
     """
-    Start a continuous background listener to estimate mouse polling rate.
+    Set up continuous polling rate estimation fed by the mouse listener.
 
-    Uses Windows Raw Input (WM_INPUT) + QueryPerformanceCounter via
-    RawInputMouseReader. This replaces the previous pynput (WH_MOUSE_LL)
-    approach which caused false 3–5ms median readings due to cross-process
-    hook delivery jitter at 500 Hz.
+    Returns (feed, stop):
+        feed(t_ns)  — call this with each mouse move event's t_ns timestamp.
+                      MouseListener calls this directly for every move event,
+                      eliminating the need for a second RawInputMouseReader.
+                      (A second reader would conflict: RegisterRawInputDevices
+                      is per-process per usage — the second call overwrites
+                      the first, starving the estimator of events.)
+        stop()      — call on logout.
 
-    Runs until the returned stop() callable is called (e.g. on logout).
-    Calls on_done(hz) on the reader thread each time the estimate changes.
+    Calls on_done(hz) each time the snapped estimate changes.
     Also updates config.ESTIMATED_POLLING_HZ on each change.
-
-    Returns a stop() callable. Store it and call it on logout.
     """
-    estimator     = PollingRateEstimator()
+    estimator      = PollingRateEstimator()
     _last_reported: dict = {"hz": None}
-    holder: dict  = {"reader": None}
 
-    def _on_event(ev: RawMouseEvent):
-        if ev.rel_x == 0 and ev.rel_y == 0:
-            return  # button-only event, no movement — skip
-        new_hz = estimator.add_move_timestamp(ev.t_ns)
+    def feed(t_ns: int) -> None:
+        new_hz = estimator.add_move_timestamp(t_ns)
         if new_hz is not None and new_hz != _last_reported["hz"]:
             _last_reported["hz"] = new_hz
             config.ESTIMATED_POLLING_HZ = new_hz
             if on_done is not None:
                 on_done(new_hz)
 
-    def stop():
-        reader = holder.get("reader")
-        if reader is not None:
-            reader.stop()
-            holder["reader"] = None
-            logger.info("Polling rate estimation stopped")
+    def stop() -> None:
+        logger.info("Polling rate estimation stopped")
 
-    reader = RawInputMouseReader(callback=_on_event)
-    reader.start()
-    holder["reader"] = reader
-    logger.info("Polling rate estimation started (Raw Input background listener)")
-    return stop
+    logger.info("Polling rate estimation started")
+    return feed, stop
 
 
 # ─────────────────────────────────────────────────────────────
