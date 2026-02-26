@@ -1,28 +1,43 @@
 """
 Mouse event listener.
 
-Hooks into OS-level mouse events via pynput and pushes raw events
-to a shared queue. Runs in a dedicated daemon thread.
+Hooks into OS-level mouse events via Windows Raw Input API (WM_INPUT) and
+pushes raw events to a shared queue. Runs in a dedicated message pump thread.
 
-Captures: move, click (press/release), scroll.
+Uses Raw Input instead of WH_MOUSE_LL (pynput) because:
+  - WH_MOUSE_LL delivers events via cross-process synchronous SendMessage with
+    variable scheduling jitter at 500 Hz (multiple ms, measured in logs).
+  - WM_INPUT is posted directly to a dedicated message pump with lower and
+    more consistent delivery latency.
+  - WM_MOUSEMOVE in the message queue can be coalesced by Windows; WM_INPUT
+    is never coalesced — every hardware report arrives as a distinct message.
+
+Timestamps are captured via time.perf_counter_ns() as the FIRST operation in
+the WM_INPUT handler — before GetCursorPos(), before queue.put() — giving
+sub-millisecond accuracy that reflects actual event arrival time.
+
+Timing quality is logged every TIMING_QUALITY_LOG_INTERVAL_S seconds so
+anomalies are visible in logs without reading the full database.
+
+Captures: move, click (press/release), scroll (vertical and horizontal).
 All timestamps: perf_counter_ns (sub-microsecond, monotonic).
 """
 
 import queue
 import logging
-from pynput import mouse
+import time
 
+import config
 from models.events import RawMouseMove, RawMouseClick, RawMouseScroll
-from utils.timing import now_ns
+from utils.raw_input import (
+    RawInputMouseReader, RawMouseEvent,
+    BUTTON_LEFT_DOWN, BUTTON_LEFT_UP,
+    BUTTON_RIGHT_DOWN, BUTTON_RIGHT_UP,
+    BUTTON_MIDDLE_DOWN, BUTTON_MIDDLE_UP,
+    BUTTON_WHEEL, BUTTON_HWHEEL, WHEEL_DELTA,
+)
 
 logger = logging.getLogger(__name__)
-
-# Map pynput button enum to string
-_BUTTON_MAP = {
-    mouse.Button.left: "left",
-    mouse.Button.right: "right",
-    mouse.Button.middle: "middle",
-}
 
 
 class MouseListener:
@@ -38,38 +53,112 @@ class MouseListener:
     """
 
     def __init__(self, event_queue: queue.Queue):
-        self._queue = event_queue
-        self._listener: mouse.Listener | None = None
+        self._queue   = event_queue
+        self._reader: RawInputMouseReader | None = None
+
+        # Timing quality tracking — lightweight, for periodic log reports
+        self._quality_intervals: list[int] = []   # recent inter-move intervals (ns)
+        self._last_move_t_ns: int | None   = None
+        self._last_quality_log_t            = time.monotonic()
 
     def start(self):
         """Start listening for mouse events in a background thread."""
-        self._listener = mouse.Listener(
-            on_move=self._on_move,
-            on_click=self._on_click,
-            on_scroll=self._on_scroll,
-        )
-        self._listener.daemon = True
-        self._listener.start()
+        self._reader = RawInputMouseReader(callback=self._on_event)
+        self._reader.start()
         logger.info("Mouse listener started")
 
     def stop(self):
         """Stop listening."""
-        if self._listener is not None:
-            self._listener.stop()
+        if self._reader is not None:
+            self._reader.stop()
+            self._reader = None
             logger.info("Mouse listener stopped")
 
-    def _on_move(self, x: int, y: int):
-        self._queue.put(RawMouseMove(x=int(x), y=int(y), t_ns=now_ns()))
+    # ── Event handler ─────────────────────────────────────────────────────────
 
-    def _on_click(self, x: int, y: int, button, pressed: bool):
-        btn = _BUTTON_MAP.get(button)
-        if btn is None:
-            return  # Unknown button (e.g. side buttons), skip
-        self._queue.put(RawMouseClick(
-            x=int(x), y=int(y), button=btn, pressed=pressed, t_ns=now_ns()
-        ))
+    def _on_event(self, ev: RawMouseEvent):
+        x, y, t = ev.cursor_x, ev.cursor_y, ev.t_ns
 
-    def _on_scroll(self, x: int, y: int, dx: int, dy: int):
-        self._queue.put(RawMouseScroll(
-            x=int(x), y=int(y), dx=dx, dy=dy, t_ns=now_ns()
-        ))
+        # Move — emit when there is actual cursor displacement
+        if ev.rel_x != 0 or ev.rel_y != 0:
+            self._queue.put(RawMouseMove(x=x, y=y, t_ns=t))
+            self._track_quality(t)
+
+        # Button / scroll events
+        flags = ev.button_flags
+        if flags:
+            if flags & BUTTON_LEFT_DOWN:
+                self._queue.put(RawMouseClick(x=x, y=y, button="left",   pressed=True,  t_ns=t))
+            if flags & BUTTON_LEFT_UP:
+                self._queue.put(RawMouseClick(x=x, y=y, button="left",   pressed=False, t_ns=t))
+            if flags & BUTTON_RIGHT_DOWN:
+                self._queue.put(RawMouseClick(x=x, y=y, button="right",  pressed=True,  t_ns=t))
+            if flags & BUTTON_RIGHT_UP:
+                self._queue.put(RawMouseClick(x=x, y=y, button="right",  pressed=False, t_ns=t))
+            if flags & BUTTON_MIDDLE_DOWN:
+                self._queue.put(RawMouseClick(x=x, y=y, button="middle", pressed=True,  t_ns=t))
+            if flags & BUTTON_MIDDLE_UP:
+                self._queue.put(RawMouseClick(x=x, y=y, button="middle", pressed=False, t_ns=t))
+            if flags & BUTTON_WHEEL:
+                notches = _wheel_notches(ev.button_data)
+                if notches:
+                    self._queue.put(RawMouseScroll(x=x, y=y, dx=0,      dy=notches, t_ns=t))
+            if flags & BUTTON_HWHEEL:
+                notches = _wheel_notches(ev.button_data)
+                if notches:
+                    self._queue.put(RawMouseScroll(x=x, y=y, dx=notches, dy=0,      t_ns=t))
+
+    # ── Timing quality tracking ───────────────────────────────────────────────
+
+    def _track_quality(self, t_ns: int):
+        """Track inter-move interval for periodic quality reporting."""
+        if self._last_move_t_ns is not None:
+            interval = t_ns - self._last_move_t_ns
+            # Store intervals in the plausible hardware range (same bounds as
+            # PollingRateEstimator — below 8000 Hz max, above 50 Hz min)
+            if config.POLLING_RATE_MIN_INTERVAL_NS <= interval <= config.POLLING_RATE_MAX_INTERVAL_NS:
+                self._quality_intervals.append(interval)
+        self._last_move_t_ns = t_ns
+
+        now = time.monotonic()
+        if now - self._last_quality_log_t >= config.TIMING_QUALITY_LOG_INTERVAL_S:
+            self._log_quality()
+            self._last_quality_log_t = now
+
+    def _log_quality(self):
+        """Log interval distribution statistics to help detect timestamp jitter."""
+        intervals = self._quality_intervals
+        self._quality_intervals = []
+
+        n = len(intervals)
+        if n < 10:
+            logger.info(f"Mouse timing quality: not enough data ({n} intervals)")
+            return
+
+        sorted_iv = sorted(intervals)
+        p10 = sorted_iv[n // 10]
+        p50 = sorted_iv[n // 2]
+        p90 = sorted_iv[int(n * 0.9)]
+        iv_max = sorted_iv[-1]
+
+        # "Anomalous" = more than 1.5× the P50 interval (e.g. >3ms when P50≈2ms)
+        threshold = p50 * 1.5
+        anomalous = sum(1 for iv in intervals if iv > threshold)
+        pct_clean = 100.0 * (n - anomalous) / n
+
+        logger.info(
+            f"Mouse timing quality: "
+            f"P10={p10/1e6:.3f}ms P50={p50/1e6:.3f}ms P90={p90/1e6:.3f}ms "
+            f"max={iv_max/1e6:.3f}ms | "
+            f"{n} intervals, {pct_clean:.1f}% clean "
+            f"(>{threshold/1e6:.1f}ms = anomalous)"
+        )
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _wheel_notches(button_data: int) -> int:
+    """Convert raw usButtonData (unsigned short) to signed notch count."""
+    # usButtonData is c_ushort (0-65535). Sign-extend: >32767 means negative.
+    delta = button_data if button_data < 32768 else button_data - 65536
+    return delta // WHEEL_DELTA
