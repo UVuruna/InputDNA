@@ -2,5 +2,10 @@
     "name": "InputDNA",
     "description": "Human Input Recorder",
     "exe_name": "InputDNA.exe",
-    "installer_name": "InputDNA_Setup.exe"
+    "installer_name": "InputDNA_Setup.exe",
+    "company_name": "UV",
+    "developer": "Uros Vuruna",
+    "copyright_year": 2026,
+    "copyright_string": "© 2026 UVuruna",
+    "website": "https://github.com/UVuruna"
 }
