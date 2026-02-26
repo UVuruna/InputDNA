@@ -114,9 +114,12 @@ class MouseListener:
         """Track inter-move interval for periodic quality reporting."""
         if self._last_move_t_ns is not None:
             interval = t_ns - self._last_move_t_ns
-            # Store intervals in the plausible hardware range (same bounds as
-            # PollingRateEstimator — below 8000 Hz max, above 50 Hz min)
-            if config.POLLING_RATE_MIN_INTERVAL_NS <= interval <= config.POLLING_RATE_MAX_INTERVAL_NS:
+            # Use Hz-aware tight max when polling rate is known (3× expected,
+            # e.g. 6ms for 500Hz). This filters inter-burst gaps (5-15ms) that
+            # would corrupt P50 when using the wide estimator bound (20ms).
+            hz = config.ESTIMATED_POLLING_HZ
+            max_ns = (1_000_000_000 // hz) * 3 if hz else config.POLLING_RATE_MAX_INTERVAL_NS
+            if config.POLLING_RATE_MIN_INTERVAL_NS <= interval <= max_ns:
                 self._quality_intervals.append(interval)
         self._last_move_t_ns = t_ns
 
@@ -141,13 +144,22 @@ class MouseListener:
         p90 = sorted_iv[int(n * 0.9)]
         iv_max = sorted_iv[-1]
 
-        # "Anomalous" = more than 1.5× the P50 interval (e.g. >3ms when P50≈2ms)
-        threshold = p50 * 1.5
+        # Anomaly threshold: 1.5× expected interval when Hz is known.
+        # P50-based threshold fails when inter-burst gaps inflate the median.
+        hz = config.ESTIMATED_POLLING_HZ
+        if hz:
+            expected_ns = 1_000_000_000 // hz
+            threshold = int(expected_ns * 1.5)
+            hz_label = f"@{hz}Hz"
+        else:
+            threshold = int(p50 * 1.5)
+            hz_label = "(Hz unknown)"
+
         anomalous = sum(1 for iv in intervals if iv > threshold)
         pct_clean = 100.0 * (n - anomalous) / n
 
         logger.info(
-            f"Mouse timing quality: "
+            f"Mouse timing quality {hz_label}: "
             f"P10={p10/1e6:.3f}ms P50={p50/1e6:.3f}ms P90={p90/1e6:.3f}ms "
             f"max={iv_max/1e6:.3f}ms | "
             f"{n} intervals, {pct_clean:.1f}% clean "
