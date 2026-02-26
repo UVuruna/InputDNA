@@ -153,12 +153,18 @@ class PollingRateEstimator:
       - Above POLLING_RATE_MAX_INTERVAL_NS: idle gaps where the cursor was
         not moving (not representative of the hardware poll rate).
 
-    After the window fills, calculates using the median of stored intervals
-    and snaps to the nearest standard rate. Each calculation also logs a full
-    quality report (P10/P50/P90 and % clean) so anomalies are visible in logs.
+    The filter bounds are FIXED and do not adapt to the current estimate.
+    An adaptive tight filter (previous approach) caused a cascade failure:
+    a wrong estimate widened the filter, allowing slow-movement intervals to
+    flood the window, which confirmed the wrong estimate indefinitely.
+
+    After the window fills, calculates using P10 (the 50 fastest intervals
+    out of 500) and snaps to the nearest standard rate. P10 captures true
+    hardware poll intervals from fast-movement bursts even when the majority
+    of the window contains slower intervals from slow movement or idle gaps.
 
     Recalculates periodically (POLLING_RATE_UPDATE_INTERVAL_S cooldown) so a
-    changed USB report rate or a bad initial estimate is eventually corrected.
+    changed USB report rate is eventually detected (e.g. user switches mouse).
 
     Thread-safe under CPython GIL: reader thread writes, Qt thread reads
     estimated_hz.
@@ -179,15 +185,14 @@ class PollingRateEstimator:
         """
         if self._last_t_ns is not None:
             interval = t_ns - self._last_t_ns
-            # After first estimate: tighten max to 3× expected interval (e.g. 6ms
-            # for 500Hz). Prevents slow-movement intervals (8ms at 500Hz) from
-            # contaminating the window and producing false re-estimates (e.g. 125Hz).
-            # Before first estimate: use wide 20ms to capture initial fast bursts.
-            if self._estimated_hz:
-                max_ns = (1_000_000_000 // self._estimated_hz) * 3
-            else:
-                max_ns = config.POLLING_RATE_MAX_INTERVAL_NS
-            if config.POLLING_RATE_MIN_INTERVAL_NS <= interval <= max_ns:
+            # Fixed-width filter regardless of current estimate.
+            # Adaptive tight filter (old approach) caused a cascade failure:
+            # wrong estimate (125Hz) → filter widens to 24ms → slow intervals
+            # flood the window → P10 rises to 6ms → estimate stays wrong forever.
+            # With a fixed max, slow intervals enter the window but P10 (the 10th
+            # percentile, i.e. the 50 fastest of 500 samples) still captures the
+            # true hardware poll intervals from fast-movement bursts.
+            if config.POLLING_RATE_MIN_INTERVAL_NS <= interval <= config.POLLING_RATE_MAX_INTERVAL_NS:
                 self._intervals_ns.append(interval)
 
         self._last_t_ns = t_ns
@@ -223,10 +228,13 @@ class PollingRateEstimator:
         p50_ns      = sorted_iv[n // 2]        # median
         p90_ns      = sorted_iv[int(n * 0.9)]
 
-        if p50_ns <= 0:
+        if p10_ns <= 0:
             return None
 
-        raw_hz  = round(1_000_000_000 / p50_ns)
+        # Use P10 (the 50 fastest intervals out of 500) instead of median.
+        # P10 captures true hardware poll intervals from fast-movement bursts.
+        # Slow-movement contamination raises P50 and P90 but not P10.
+        raw_hz  = round(1_000_000_000 / p10_ns)
         snapped = config.snap_polling_rate(raw_hz)
 
         # "Clean" = within 1.5× the median interval (e.g. <3ms for a 500Hz mouse)

@@ -158,8 +158,9 @@ FLUSH_INTERVAL_S = 2.0
 SYSTEM_MONITOR_INTERVAL_S = 10.0
 
 # Rolling window size for polling rate estimation (number of filtered intervals).
-# Larger window = more stable estimate; at 500 Hz ~0.6 s to fill initially.
-POLLING_RATE_SAMPLE_COUNT = 300
+# 500 samples: at 500 Hz fills in ~1 s. P10 = 50 fastest intervals —
+# captures true hardware poll intervals even when slow-movement intervals dominate.
+POLLING_RATE_SAMPLE_COUNT = 500
 
 # Seconds between periodic re-estimation after the first result.
 # First estimate fires immediately when the window fills.
