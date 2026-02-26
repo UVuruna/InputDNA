@@ -85,12 +85,20 @@ class MouseListener:
     def _on_event(self, ev: RawMouseEvent):
         x, y, t = ev.cursor_x, ev.cursor_y, ev.t_ns
 
+        # Feed every WM_INPUT timestamp to the polling rate estimator.
+        # The estimator needs hardware poll intervals (2ms at 500Hz), not just
+        # position-change intervals. During slow movement, the cursor position
+        # changes every 2-4 polls (4-8ms at 500Hz), so feeding only
+        # position-change events produces false low estimates (250→125 Hz).
+        # Zero-delta reports (rel_x=rel_y=0 but still a valid 500Hz poll)
+        # preserve the true 2ms spacing.
+        if self._poll_feed is not None:
+            self._poll_feed(t)
+
         # Move — emit when there is actual cursor displacement
         if ev.rel_x != 0 or ev.rel_y != 0:
             self._queue.put(RawMouseMove(x=x, y=y, t_ns=t))
             self._track_quality(t)
-            if self._poll_feed is not None:
-                self._poll_feed(t)
 
         # Button / scroll events
         flags = ev.button_flags

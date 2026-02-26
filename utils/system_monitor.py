@@ -15,7 +15,9 @@ timestamps from the MouseListener rather than from a dedicated second
 RawInputMouseReader. Windows RegisterRawInputDevices is per-process for a
 given usage page/usage pair — a second registration overwrites the first,
 so two concurrent RawInputMouseReader instances cannot both receive events.
-The mouse listener calls poll_feed(t_ns) directly for each move event.
+The mouse listener calls poll_feed(t_ns) for each WM_INPUT event (not only
+position-change events) so the estimator receives true hardware poll intervals
+even during slow mouse movement when cursor position does not change every poll.
 """
 
 import ctypes
@@ -263,7 +265,7 @@ def start_polling_estimation(
 
     Returns (feed, stop):
         feed(t_ns)  — call this with each mouse move event's t_ns timestamp.
-                      MouseListener calls this directly for every move event,
+                      MouseListener calls this for every WM_INPUT event,
                       eliminating the need for a second RawInputMouseReader.
                       (A second reader would conflict: RegisterRawInputDevices
                       is per-process per usage — the second call overwrites
