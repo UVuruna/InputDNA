@@ -1,33 +1,28 @@
 """
-Raw Input mouse reader — Windows Raw Input API with MSG.time calibration.
+Raw Input mouse reader — Windows Raw Input API + QueryPerformanceCounter.
 
-Uses Win32 Raw Input (WM_INPUT) for low-overhead, non-blocking mouse event
-capture. Unlike WH_MOUSE_LL (which blocks the entire system input pipeline
-until the hook returns), Raw Input posts WM_INPUT messages asynchronously —
-the OS never waits for our code.
-
-Timestamp strategy — MSG.time calibration:
-    WM_INPUT messages are dispatched by a Python message pump thread that must
-    hold the CPython GIL. When other Python threads hold the GIL (default switch
-    interval = 5ms), multiple WM_INPUT messages queue up and are dispatched in a
-    burst — all receiving nearly identical perf_counter_ns() timestamps despite
-    arriving at the hardware level with correct 2ms spacing (500Hz mouse).
-
-    To recover true event timing, we use the MSG.time field: a DWORD millisecond
-    timestamp set by the Windows kernel at message POST time (before any
-    user-mode GIL contention). On first WM_INPUT, a calibration anchor maps
-    MSG.time into the perf_counter_ns domain. All subsequent event timestamps
-    are computed as: anchor_pfc + (msg.time - anchor_tick) * 1_000_000.
-
-    timeBeginPeriod(1) is called during the message pump lifetime to ensure
-    MSG.time has 1ms resolution (sufficient for 500Hz = 2ms intervals).
+Uses Win32 Raw Input (WM_INPUT) instead of WH_MOUSE_LL for accurate event
+timing. WH_MOUSE_LL delivers events via cross-process synchronous SendMessage
+with variable scheduling jitter; Raw Input posts WM_INPUT directly to a
+dedicated message pump thread, allowing QPC capture with sub-millisecond
+accuracy unaffected by cross-process hook delivery overhead.
 
 Architecture:
     - Hidden message-only window (HWND_MESSAGE) created on a background thread.
     - Registered with RIDEV_INPUTSINK — receives events regardless of focus.
     - Message pump runs GetMessage / DispatchMessage in a loop.
-    - Before each DispatchMessage, msg.time is stored for the wndproc callback.
-    - Cursor position via GetCursorPos() — always in screen pixels.
+    - On WM_INPUT arrival: time.perf_counter_ns() is captured as the FIRST
+      operation, before any other work. This gives the earliest possible
+      timestamp with ~100ns resolution (QueryPerformanceCounter under the hood).
+    - Cursor position is tracked by accumulating RAWMOUSE.lLastX/lLastY from
+      each hardware report. GetCursorPos() is NOT used in the hot path because
+      it returns the OS cursor position after ALL pending reports have been
+      integrated: when the message pump is preempted for 8ms and 4 reports
+      queue up, all 4 dispatches see the same GetCursorPos value, collapsing
+      4 distinct positions into 1. Accumulating per-report deltas gives a
+      unique position for each hardware poll (500Hz at 2ms intervals).
+      Seeded once from GetCursorPos at startup; resynced on zero-movement
+      events (clicks, scrolls) to prevent long-term drift from acceleration.
 
 Multiple instances can coexist — each creates a unique HWND class name and
 receives an independent copy of every WM_INPUT from the OS.
@@ -48,7 +43,6 @@ logger = logging.getLogger(__name__)
 
 _user32   = ctypes.windll.user32
 _kernel32 = ctypes.windll.kernel32
-_winmm    = ctypes.windll.winmm
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -173,20 +167,20 @@ class RawMouseEvent:
     """
     A single raw mouse event delivered by WM_INPUT.
 
-    cursor_x / cursor_y — screen pixel position from GetCursorPos(). Always in
-                          the coordinate space used by the rest of the system
-                          (clicks, screen resolution, UI element positions).
+    cursor_x / cursor_y — accumulated cursor position in hardware counts.
+                          Seeded from GetCursorPos() at startup, then updated
+                          by adding lLastX/lLastY for each hardware report.
+                          Each event gets a unique position (500Hz at 2ms
+                          intervals) regardless of message pump scheduling.
+                          Resynced to GetCursorPos on zero-movement events.
     rel_x / rel_y       — relative movement from RAWMOUSE.lLastX/lLastY for
-                          this specific hardware report (raw hardware counts).
+                          this specific hardware report.
     button_flags        — usButtonFlags bitmask (which buttons changed state).
     button_data         — usButtonData. For wheel events: signed scroll delta
                           in WHEEL_DELTA units (120 per notch); stored as raw
                           unsigned short — callers must sign-extend if needed.
-    t_ns                — event timestamp in perf_counter_ns domain. Derived
-                          from the kernel-level MSG.time (set when Windows posts
-                          the WM_INPUT message) converted to nanoseconds via a
-                          one-time calibration anchor. Gives correct inter-event
-                          spacing (e.g. 2ms at 500Hz) regardless of GIL delays.
+    t_ns                — time.perf_counter_ns() captured as the very first
+                          operation in the WM_INPUT handler.
     """
     cursor_x:     int
     cursor_y:     int
@@ -244,14 +238,12 @@ class RawInputMouseReader:
             name=f"raw-input-{_instance_counter}",
             daemon=True,
         )
-        # Timestamp calibration — MSG.time (kernel post time) → perf_counter_ns.
-        # Established on first WM_INPUT; all subsequent timestamps use MSG.time
-        # deltas from this anchor to eliminate GIL-induced burst clustering.
-        self._msg_post_time: int = 0
-        self._anchor_pfc:  int  = 0
-        self._anchor_tick: int  = 0
-        self._calibrated:  bool = False
-        self._last_t_ns:   int  = 0
+        # Accumulated cursor position — updated from lLastX/lLastY per report.
+        # Seeded from GetCursorPos on first event; avoids GetCursorPos in hot
+        # path where it collapses 4 queued reports into one position.
+        self._cursor_x: int = 0
+        self._cursor_y: int = 0
+        self._cursor_seeded: bool = False
 
     def start(self):
         """Start the reader. Blocks until the window is registered and ready."""
@@ -270,50 +262,13 @@ class RawInputMouseReader:
 
     def _wnd_proc(self, hwnd, msg, wparam, lparam):
         if msg == _WM_INPUT:
-            t_ns = self._stamp()
+            t_ns = time.perf_counter_ns()   # QPC — captured first, before anything else
             self._handle(lparam, t_ns)
             return 0
         if msg == _WM_DESTROY:
             _user32.PostQuitMessage(0)
             return 0
         return _user32.DefWindowProcW(hwnd, msg, wparam, lparam)
-
-    def _stamp(self) -> int:
-        """Convert MSG.time (kernel post time) to perf_counter_ns domain.
-
-        MSG.time is set by the Windows kernel when the WM_INPUT message is
-        posted to the queue — before any user-mode GIL contention. On first
-        call, establishes a calibration anchor mapping MSG.time (ms) into the
-        perf_counter_ns domain. Subsequent calls compute timestamps from
-        MSG.time deltas, giving correct inter-event spacing even when the
-        message pump dispatches a burst of queued messages.
-        """
-        pfc_ns = time.perf_counter_ns()
-        tick = self._msg_post_time
-
-        if not self._calibrated:
-            self._anchor_pfc  = pfc_ns
-            self._anchor_tick = tick
-            self._calibrated  = True
-            self._last_t_ns   = pfc_ns
-            logger.debug(
-                f"Timestamp calibration: anchor_tick={tick}ms, "
-                f"anchor_pfc={pfc_ns}"
-            )
-            return pfc_ns
-
-        # MSG.time delta → nanoseconds, mapped into perf_counter domain.
-        # Unsigned 32-bit wrap (GetTickCount rolls over every ~49 days)
-        # is handled by the & 0xFFFFFFFF mask.
-        delta_ms = (tick - self._anchor_tick) & 0xFFFFFFFF
-        t_ns = self._anchor_pfc + delta_ms * 1_000_000
-
-        # Ensure strict monotonicity (handles same-tick events at ≥1000Hz
-        # where MSG.time resolution may equal the polling interval).
-        if t_ns <= self._last_t_ns:
-            t_ns = self._last_t_ns + 1
-        self._last_t_ns = t_ns
-        return t_ns
 
     def _handle(self, lparam, t_ns: int):
         size = ctypes.wintypes.UINT(0)
@@ -336,18 +291,34 @@ class RawInputMouseReader:
 
         m = raw.data.mouse
 
-        # cursor_x / cursor_y must be screen pixels — the coordinate space
-        # used by every other part of the system (clicks, screen resolution,
-        # UI element positions). GetCursorPos always returns screen pixels
-        # after applying pointer speed and acceleration. lLastX/lLastY are
-        # raw hardware counts; with mouse acceleration ON they do NOT equal
-        # screen pixels and must NOT be used for position tracking.
-        pt = _POINT()
-        _user32.GetCursorPos(ctypes.byref(pt))
+        # Update accumulated cursor position for this hardware report.
+        # Three cases:
+        #   1. Absolute device (tablet/touchscreen): coordinates are normalized
+        #      0-65535 — always resync from GetCursorPos (no batching issue).
+        #   2. First relative event, or zero-movement event (button/scroll):
+        #      resync from GetCursorPos to seed or prevent drift.
+        #   3. Normal relative movement: accumulate lLastX/lLastY directly.
+        #      This gives a unique position per hardware report even when
+        #      the message pump dispatches a burst of queued messages.
+        if m.usFlags & _MOUSE_MOVE_ABSOLUTE:
+            pt = _POINT()
+            _user32.GetCursorPos(ctypes.byref(pt))
+            self._cursor_x = pt.x
+            self._cursor_y = pt.y
+            self._cursor_seeded = True
+        elif not self._cursor_seeded or (m.lLastX == 0 and m.lLastY == 0):
+            pt = _POINT()
+            _user32.GetCursorPos(ctypes.byref(pt))
+            self._cursor_x = pt.x
+            self._cursor_y = pt.y
+            self._cursor_seeded = True
+        else:
+            self._cursor_x += m.lLastX
+            self._cursor_y += m.lLastY
 
         self._callback(RawMouseEvent(
-            cursor_x     = pt.x,
-            cursor_y     = pt.y,
+            cursor_x     = self._cursor_x,
+            cursor_y     = self._cursor_y,
             rel_x        = m.lLastX,
             rel_y        = m.lLastY,
             button_flags = m._buttons._st.usButtonFlags,
@@ -401,16 +372,12 @@ class RawInputMouseReader:
         self._ready.set()
         logger.debug(f"RawInputMouseReader '{self._class_name}' started")
 
-        _winmm.timeBeginPeriod(1)
-        try:
-            msg = _MSG()
-            while _user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-                self._msg_post_time = msg.time
-                _user32.TranslateMessage(ctypes.byref(msg))
-                _user32.DispatchMessageW(ctypes.byref(msg))
-        finally:
-            _winmm.timeEndPeriod(1)
-            _user32.DestroyWindow(hwnd)
-            _user32.UnregisterClassW(self._class_name, hinstance)
-            self._hwnd = None
-            logger.debug(f"RawInputMouseReader '{self._class_name}' stopped")
+        msg = _MSG()
+        while _user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+            _user32.TranslateMessage(ctypes.byref(msg))
+            _user32.DispatchMessageW(ctypes.byref(msg))
+
+        _user32.DestroyWindow(hwnd)
+        _user32.UnregisterClassW(self._class_name, hinstance)
+        self._hwnd = None
+        logger.debug(f"RawInputMouseReader '{self._class_name}' stopped")

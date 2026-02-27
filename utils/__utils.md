@@ -89,21 +89,12 @@ Two classes:
 
 Low-level ctypes wrapper for the Windows Raw Input API. Provides
 `RawInputMouseReader` — a hidden message-only window (`HWND_MESSAGE`) that
-receives `WM_INPUT` events with kernel-level timestamps.
+receives `WM_INPUT` events with `QueryPerformanceCounter` timestamps.
 
 Used by both `MouseListener` and `PollingRateEstimator`. Replaces `WH_MOUSE_LL`
-(pynput) which blocked the entire system input pipeline during each hook callback.
-`WM_INPUT` is posted asynchronously to a dedicated thread and never coalesced.
-
-**Timestamp strategy — MSG.time calibration:**
-
-The Python message pump thread must hold the CPython GIL to dispatch messages.
-When other threads hold the GIL (~5ms switch interval), WM_INPUT messages queue
-up and burst-dispatch with nearly identical `perf_counter_ns()` timestamps. To
-recover true event timing, the reader uses `MSG.time` — a DWORD millisecond
-timestamp set by the Windows kernel at message post time, before any user-mode
-GIL contention. A one-time calibration anchor maps `MSG.time` into the
-`perf_counter_ns` domain. `timeBeginPeriod(1)` ensures 1ms timer resolution.
+(pynput) which caused timestamp jitter of several milliseconds at 500 Hz due to
+cross-process synchronous hook delivery. `WM_INPUT` is posted asynchronously to
+a dedicated thread and never coalesced.
 
 **Classes / constants:**
 
