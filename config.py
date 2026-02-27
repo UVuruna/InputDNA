@@ -158,9 +158,8 @@ FLUSH_INTERVAL_S = 2.0
 SYSTEM_MONITOR_INTERVAL_S = 10.0
 
 # Rolling window size for polling rate estimation (number of filtered intervals).
-# 500 samples: at 500 Hz fills in ~1 s. P10 = 50 fastest intervals —
-# captures true hardware poll intervals even when slow-movement intervals dominate.
-POLLING_RATE_SAMPLE_COUNT = 500
+# Larger window = more stable estimate; at 500 Hz ~0.6 s to fill initially.
+POLLING_RATE_SAMPLE_COUNT = 300
 
 # Seconds between periodic re-estimation after the first result.
 # First estimate fires immediately when the window fills.
@@ -169,15 +168,9 @@ POLLING_RATE_UPDATE_INTERVAL_S = 60.0
 # Hardware interval bounds for filtering (nanoseconds).
 # Intervals outside this range are discarded before entering the window.
 #   Min = 125 μs  →  fastest possible interval at 8000 Hz (burst artifact threshold)
-#   Max = 8 ms    →  125 Hz lower bound — the slowest standard polling rate
-#                    Anything above 8ms is an idle gap between movements, not a poll interval
+#   Max = 20 ms   →  slower than 50 Hz; indicates idle gap, not a real poll interval
 POLLING_RATE_MIN_INTERVAL_NS = 125_000      # 8000 Hz upper bound
-POLLING_RATE_MAX_INTERVAL_NS = 8_000_000    # 125 Hz lower bound
-
-# How often the main MouseListener logs its timing quality report.
-# Report shows inter-move interval distribution (P10/P50/P90) and % clean intervals.
-# Visible in logs — allows detecting timestamp jitter without reading the database.
-TIMING_QUALITY_LOG_INTERVAL_S = 300.0       # every 5 minutes
+POLLING_RATE_MAX_INTERVAL_NS = 20_000_000   # 50 Hz lower bound
 
 # Estimated mouse polling rate (Hz). Set at runtime by the polling rate
 # estimator after login. None means not yet measured.

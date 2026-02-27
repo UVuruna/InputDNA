@@ -24,32 +24,19 @@ attach a precise timestamp, and push to the queue. No analysis, no filtering.
 
 ### `mouse_listener.py` — Mouse Event Capture
 
-Uses Windows Raw Input API (`WM_INPUT`) via a hidden message-only window
-(`HWND_MESSAGE`) instead of `WH_MOUSE_LL` (pynput). Timestamps are captured
-via `time.perf_counter_ns()` as the very first operation in the `WM_INPUT`
-handler — before `GetCursorPos()`, before queue.put() — giving sub-millisecond
-accuracy unaffected by cross-process hook delivery jitter.
-
-`WH_MOUSE_LL` caused false polling rate readings (3–5ms medians on a 500Hz mouse)
-because events were delivered via synchronous cross-process `SendMessage` with
-variable scheduling jitter. `WM_INPUT` is posted directly to a dedicated message
-pump thread and is never coalesced by the OS.
-
-Absolute cursor coordinates come from `GetCursorPos()` called immediately
-after the QPC timestamp capture. `RAWMOUSE.lLastX/lLastY` (relative movement)
-is used only to detect that motion occurred.
-
-Logs a timing quality report every `TIMING_QUALITY_LOG_INTERVAL_S` (default
-5 minutes) showing inter-move interval distribution (P10/P50/P90) and
-percentage of clean intervals — visible in logs without reading the database.
+Wraps `pynput.mouse.Listener` to capture move, click, and scroll events.
+Each event gets a `perf_counter_ns` timestamp and is pushed as a raw
+dataclass to the shared event queue.
 
 **Events produced:**
 
 | Event | Trigger | Data |
 |-------|---------|------|
-| `RawMouseMove` | Cursor moved (rel_x≠0 or rel_y≠0) | x, y, t_ns |
+| `RawMouseMove` | Cursor moved | x, y, t_ns |
 | `RawMouseClick` | Button pressed/released | x, y, button, pressed, t_ns |
-| `RawMouseScroll` | Scroll wheel (vertical or horizontal) | x, y, dx, dy, t_ns |
+| `RawMouseScroll` | Scroll wheel | x, y, dx, dy, t_ns |
+
+Supports pause/resume via the global hotkey (`Ctrl+Alt+R`).
 
 ### `keyboard_listener.py` — Keyboard Event Capture
 

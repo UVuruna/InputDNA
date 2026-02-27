@@ -13,7 +13,6 @@ functions with no state — any module can import and use them freely.
   🐍 __init__.py
   🐍 timing.py
   🐍 keyboard_layout.py
-  🐍 raw_input.py
   🐍 system_monitor.py
   🐍 stats_tracker.py
 ```
@@ -85,29 +84,6 @@ Two classes:
 | Mouse | `movements`, `clicks`, `left_clicks`, `right_clicks`, `middle_clicks`, `double_clicks`, `triple_clicks`, `spam_clicks`, `drags`, `scrolls` |
 | Keyboard | `keystrokes`, `upper_keys`, `lower_keys`, `code_keys`, `number_keys`, `numpad_keys`, `other_keys`, `shortcuts`, `words` |
 
-### `raw_input.py` — Windows Raw Input Reader
-
-Low-level ctypes wrapper for the Windows Raw Input API. Provides
-`RawInputMouseReader` — a hidden message-only window (`HWND_MESSAGE`) that
-receives `WM_INPUT` events with `QueryPerformanceCounter` timestamps.
-
-Used by both `MouseListener` and `PollingRateEstimator`. Replaces `WH_MOUSE_LL`
-(pynput) which caused timestamp jitter of several milliseconds at 500 Hz due to
-cross-process synchronous hook delivery. `WM_INPUT` is posted asynchronously to
-a dedicated thread and never coalesced.
-
-**Classes / constants:**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `RawInputMouseReader` | class | Creates HWND, registers `RIDEV_INPUTSINK`, runs message pump, calls `callback(RawMouseEvent)` |
-| `RawMouseEvent` | dataclass | `cursor_x`, `cursor_y`, `rel_x`, `rel_y`, `button_flags`, `button_data`, `t_ns` |
-| `BUTTON_*` | int | Public re-exports of `usButtonFlags` bitmask values |
-| `WHEEL_DELTA` | int | 120 — Windows standard notch size |
-
-Multiple instances coexist. Each gets a unique WNDCLASS and receives an
-independent copy of every `WM_INPUT` from the OS.
-
 ### `system_monitor.py` — System State Monitor
 
 Periodically checks system settings that affect input behavior and emits
@@ -132,24 +108,21 @@ for estimating mouse polling rate from move event timestamps.
 
 **`PollingRateEstimator` design:**
 
-Timestamps come from `RawInputMouseReader` (WM_INPUT + QPC), not WH_MOUSE_LL.
-This eliminates the false 3–5ms median readings caused by cross-process hook
-delivery jitter at 500 Hz.
-
 Maintains a rolling `deque` of the last `POLLING_RATE_SAMPLE_COUNT` (300) valid
 inter-event intervals. Two filters prevent garbage from entering the window:
 
 | Filter | Threshold | Removes |
 |--------|-----------|---------|
-| Min | `POLLING_RATE_MIN_INTERVAL_NS` (125 μs) | Burst artifacts (message pump catch-up) |
+| Min | `POLLING_RATE_MIN_INTERVAL_NS` (125 μs) | OS burst-delivery artifacts |
 | Max | `POLLING_RATE_MAX_INTERVAL_NS` (20 ms) | Idle gaps / slow cursor movement |
 
-Calculation uses **median (P50)** of the window, snapped to the nearest standard
-rate (125, 250, 500, 1000, 2000, 4000, 8000 Hz). Each calculation logs a full
-quality report: P10/P50/P90 and percentage of clean intervals. A warning is
-emitted if more than 5% of intervals are anomalous (>1.5× median).
+Calculation uses **median** of the window, snapped to the nearest standard rate
+(125, 250, 500, 1000, 2000, 4000, 8000 Hz). The first estimate fires as soon as
+the window fills; subsequent recalculations respect a cooldown
+(`POLLING_RATE_UPDATE_INTERVAL_S`, default 60 s) so a corrected estimate is
+eventually picked up without constant CPU work.
 
-`start_polling_estimation()` starts a `RawInputMouseReader` that runs for the
+`start_polling_estimation()` starts a daemon pynput listener that runs for the
 entire login session. It returns a `stop()` callable — call it on logout.
 The `on_done(hz)` callback is fired every time the snapped estimate **changes**
 (not just on the first result), so the dashboard stays current.

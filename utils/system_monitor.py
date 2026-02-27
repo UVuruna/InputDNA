@@ -10,18 +10,13 @@ Periodically checks system settings that affect input behavior:
 On recording start, captures initial state. Then polls at a configurable
 interval, emitting SystemEventRecord only when a value changes.
 
-Polling rate is estimated via PollingRateEstimator, fed with move-event
-timestamps from the MouseListener rather than from a dedicated second
-RawInputMouseReader. Windows RegisterRawInputDevices is per-process for a
-given usage page/usage pair — a second registration overwrites the first,
-so two concurrent RawInputMouseReader instances cannot both receive events.
-The mouse listener calls poll_feed(t_ns) for each WM_INPUT event (not only
-position-change events) so the estimator receives true hardware poll intervals
-even during slow mouse movement when cursor position does not change every poll.
+Polling rate is estimated separately from mouse move event timestamps
+(see estimate_polling_rate).
 """
 
 import ctypes
 import logging
+import statistics
 import threading
 import time
 from collections import deque
@@ -142,36 +137,25 @@ class PollingRateEstimator:
     """
     Estimates mouse polling rate from move event timestamps.
 
-    Receives timestamps from a RawInputMouseReader (WM_INPUT + QPC), not from
-    WH_MOUSE_LL, so delivery jitter is sub-millisecond rather than several ms.
-
     Maintains a rolling window of recent inter-event intervals. Intervals
     outside the physically plausible range are discarded before entering
     the window:
-      - Below POLLING_RATE_MIN_INTERVAL_NS: burst artifacts (rapid-succession
-        events when the message pump catches up after a brief preemption).
-      - Above POLLING_RATE_MAX_INTERVAL_NS: idle gaps where the cursor was
-        not moving (not representative of the hardware poll rate).
+      - Below POLLING_RATE_MIN_INTERVAL_NS: burst artifacts from OS event
+        batching (appear faster than the hardware can actually poll).
+      - Above POLLING_RATE_MAX_INTERVAL_NS: idle gaps where the cursor
+        wasn't moving (not representative of the hardware poll rate).
 
-    The filter bounds are FIXED and do not adapt to the current estimate.
-    An adaptive tight filter (previous approach) caused a cascade failure:
-    a wrong estimate widened the filter, allowing slow-movement intervals to
-    flood the window, which confirmed the wrong estimate indefinitely.
+    After the window fills, calculates using the median of stored intervals
+    and snaps to the nearest standard rate. Recalculates periodically
+    (POLLING_RATE_UPDATE_INTERVAL_S cooldown) so a changed USB report rate
+    or a bad initial estimate is eventually corrected.
 
-    After the window fills, calculates using P10 (the 50 fastest intervals
-    out of 500) and snaps to the nearest standard rate. P10 captures true
-    hardware poll intervals from fast-movement bursts even when the majority
-    of the window contains slower intervals from slow movement or idle gaps.
-
-    Recalculates periodically (POLLING_RATE_UPDATE_INTERVAL_S cooldown) so a
-    changed USB report rate is eventually detected (e.g. user switches mouse).
-
-    Thread-safe under CPython GIL: reader thread writes, Qt thread reads
+    Thread-safe under CPython GIL: listener thread writes, Qt thread reads
     estimated_hz.
     """
 
     def __init__(self, sample_count: int = config.POLLING_RATE_SAMPLE_COUNT):
-        self._sample_count        = sample_count
+        self._sample_count = sample_count
         self._intervals_ns: deque[int] = deque(maxlen=sample_count)
         self._last_t_ns: Optional[int] = None
         self._estimated_hz: Optional[int] = None
@@ -185,13 +169,6 @@ class PollingRateEstimator:
         """
         if self._last_t_ns is not None:
             interval = t_ns - self._last_t_ns
-            # Fixed-width filter regardless of current estimate.
-            # Adaptive tight filter (old approach) caused a cascade failure:
-            # wrong estimate (125Hz) → filter widens to 24ms → slow intervals
-            # flood the window → P10 rises to 6ms → estimate stays wrong forever.
-            # With a fixed max, slow intervals enter the window but P10 (the 10th
-            # percentile, i.e. the 50 fastest of 500 samples) still captures the
-            # true hardware poll intervals from fast-movement bursts.
             if config.POLLING_RATE_MIN_INTERVAL_NS <= interval <= config.POLLING_RATE_MAX_INTERVAL_NS:
                 self._intervals_ns.append(interval)
 
@@ -212,47 +189,23 @@ class PollingRateEstimator:
         """
         Calculate polling rate from the rolling window using median.
 
-        Logs a full quality report with P10/P50/P90 and percentage of clean
-        intervals so timing anomalies are immediately visible in logs.
-
         Returns new snapped Hz if the value changed, else None.
         """
         self._last_calculated_ns = now
         intervals = list(self._intervals_ns)
-        n = len(intervals)
         if not intervals:
             return None
 
-        sorted_iv   = sorted(intervals)
-        p10_ns      = sorted_iv[n // 10]
-        p50_ns      = sorted_iv[n // 2]        # median
-        p90_ns      = sorted_iv[int(n * 0.9)]
-
-        if p10_ns <= 0:
+        median_ns = statistics.median(intervals)
+        if median_ns <= 0:
             return None
 
-        # Use P10 (the 50 fastest intervals out of 500) instead of median.
-        # P10 captures true hardware poll intervals from fast-movement bursts.
-        # Slow-movement contamination raises P50 and P90 but not P10.
-        raw_hz  = round(1_000_000_000 / p10_ns)
+        raw_hz = round(1_000_000_000 / median_ns)
         snapped = config.snap_polling_rate(raw_hz)
-
-        # "Clean" = within 1.5× the median interval (e.g. <3ms for a 500Hz mouse)
-        threshold_ns = int(p50_ns * 1.5)
-        anomalous    = sum(1 for iv in intervals if iv > threshold_ns)
-        pct_clean    = 100.0 * (n - anomalous) / n
-
         logger.info(
-            f"Mouse polling rate: raw={raw_hz} Hz → snapped={snapped} Hz | "
-            f"P10={p10_ns/1e6:.3f}ms P50={p50_ns/1e6:.3f}ms P90={p90_ns/1e6:.3f}ms | "
-            f"{n} samples, {pct_clean:.1f}% clean"
+            f"Mouse polling rate: raw={raw_hz} Hz → snapped={snapped} Hz "
+            f"(median={median_ns / 1e6:.3f} ms, {len(intervals)} samples)"
         )
-
-        if pct_clean < 95.0:
-            logger.warning(
-                f"Mouse polling rate: {100.0 - pct_clean:.1f}% of intervals "
-                f"exceed {threshold_ns/1e6:.1f}ms — timestamp jitter detected"
-            )
 
         if snapped != self._estimated_hz:
             self._estimated_hz = snapped
@@ -265,40 +218,44 @@ class PollingRateEstimator:
         return self._estimated_hz
 
 
-def start_polling_estimation(
-    on_done: Optional[Callable[[int], None]] = None,
-) -> tuple[Callable[[int], None], Callable[[], None]]:
+def start_polling_estimation(on_done: Optional[Callable[[int], None]] = None) -> Callable[[], None]:
     """
-    Set up continuous polling rate estimation fed by the mouse listener.
+    Start a continuous background listener to estimate mouse polling rate.
 
-    Returns (feed, stop):
-        feed(t_ns)  — call this with each mouse move event's t_ns timestamp.
-                      MouseListener calls this for every WM_INPUT event,
-                      eliminating the need for a second RawInputMouseReader.
-                      (A second reader would conflict: RegisterRawInputDevices
-                      is per-process per usage — the second call overwrites
-                      the first, starving the estimator of events.)
-        stop()      — call on logout.
-
-    Calls on_done(hz) each time the snapped estimate changes.
+    Runs until the returned stop() callable is called (e.g. on logout).
+    Calls on_done(hz) on the listener thread each time the estimate changes.
     Also updates config.ESTIMATED_POLLING_HZ on each change.
-    """
-    estimator      = PollingRateEstimator()
-    _last_reported: dict = {"hz": None}
 
-    def feed(t_ns: int) -> None:
-        new_hz = estimator.add_move_timestamp(t_ns)
+    Returns a stop() callable. Store it and call it on logout.
+    """
+    from pynput import mouse as _mouse
+    from utils.timing import now_ns as _now_ns
+
+    estimator = PollingRateEstimator()
+    _last_reported: dict = {"hz": None}
+    holder: dict = {"listener": None}
+
+    def _on_move(x, y):
+        new_hz = estimator.add_move_timestamp(_now_ns())
         if new_hz is not None and new_hz != _last_reported["hz"]:
             _last_reported["hz"] = new_hz
             config.ESTIMATED_POLLING_HZ = new_hz
             if on_done is not None:
                 on_done(new_hz)
 
-    def stop() -> None:
-        logger.info("Polling rate estimation stopped")
+    def stop():
+        listener = holder.get("listener")
+        if listener is not None:
+            listener.stop()
+            holder["listener"] = None
+            logger.info("Polling rate estimation stopped")
 
-    logger.info("Polling rate estimation started")
-    return feed, stop
+    listener = _mouse.Listener(on_move=_on_move)
+    listener.daemon = True
+    holder["listener"] = listener
+    listener.start()
+    logger.info("Polling rate estimation started (continuous background listener)")
+    return stop
 
 
 # ─────────────────────────────────────────────────────────────
