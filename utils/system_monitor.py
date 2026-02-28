@@ -126,6 +126,8 @@ def get_all_state() -> dict[str, str]:
         "mouse_acceleration": str(get_mouse_acceleration()),
         "screen_resolution": get_screen_resolution(),
         "keyboard_layout": get_keyboard_layout(),
+        "mouse_button4_label": config.MOUSE_BUTTON4_LABEL,
+        "mouse_button5_label": config.MOUSE_BUTTON5_LABEL,
     }
 
 

@@ -11,7 +11,7 @@ import logging
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QGridLayout, QComboBox, QSlider, QSpinBox,
-    QMessageBox, QScrollArea,
+    QLineEdit, QMessageBox, QScrollArea,
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -155,6 +155,20 @@ class SettingsScreen(QWidget):
         sys_layout.addLayout(dpi_row, row, 1)
         row += 1
 
+        # Mouse button 4 label
+        sys_layout.addWidget(QLabel("Mouse button 4:"), row, 0)
+        self._btn4_edit = QLineEdit()
+        self._btn4_edit.setPlaceholderText("e.g. Back")
+        sys_layout.addWidget(self._btn4_edit, row, 1)
+        row += 1
+
+        # Mouse button 5 label
+        sys_layout.addWidget(QLabel("Mouse button 5:"), row, 0)
+        self._btn5_edit = QLineEdit()
+        self._btn5_edit.setPlaceholderText("e.g. Forward")
+        sys_layout.addWidget(self._btn5_edit, row, 1)
+        row += 1
+
         layout.addWidget(sys_group)
 
         # ── Calibration ──────────────────────────────────────
@@ -239,6 +253,10 @@ class SettingsScreen(QWidget):
         # DPI
         self._dpi_spin.setValue(config.USER_DPI)
 
+        # Mouse button labels
+        self._btn4_edit.setText(config.MOUSE_BUTTON4_LABEL)
+        self._btn5_edit.setText(config.MOUSE_BUTTON5_LABEL)
+
         # Stats window
         idx = self._stats_window_combo.findData(config.STATS_WINDOW_MINUTES)
         if idx >= 0:
@@ -278,6 +296,8 @@ class SettingsScreen(QWidget):
 
         # System settings
         settings["system.dpi"] = str(self._dpi_spin.value())
+        settings["mouse.button4_label"] = self._btn4_edit.text().strip() or "Back"
+        settings["mouse.button5_label"] = self._btn5_edit.text().strip() or "Forward"
 
         # Persist to DB
         save_settings(self._user_id, settings)

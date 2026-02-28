@@ -208,6 +208,13 @@ CALIBRATION_CLICK_COUNT = 20
 # Mouse DPI — hardware-specific, entered manually or measured by user.
 USER_DPI = 800
 
+# Mouse side-button labels — what physical buttons 4/5 are mapped to.
+# Windows cannot detect driver-level remapping (Logitech/Razer/etc.),
+# so the user sets these manually in Settings.
+# Recorded to system_events at session start for per-session context.
+MOUSE_BUTTON4_LABEL = "Back"
+MOUSE_BUTTON5_LABEL = "Forward"
+
 # Auto-start recording on Windows login.
 START_WITH_WINDOWS = False
 
@@ -237,6 +244,8 @@ _SETTING_MAP: dict[str, tuple[str, type]] = {
     "recording.db_rotation_max_bytes":  ("DB_ROTATION_MAX_BYTES", int),
     "recording.click_sequence_gap_ms":  ("CLICK_SEQUENCE_GAP_MS", int),
     "system.dpi":                       ("USER_DPI", int),
+    "mouse.button4_label":              ("MOUSE_BUTTON4_LABEL", str),
+    "mouse.button5_label":              ("MOUSE_BUTTON5_LABEL", str),
     "recording.stats_window_minutes":   ("STATS_WINDOW_MINUTES", int),
 }
 

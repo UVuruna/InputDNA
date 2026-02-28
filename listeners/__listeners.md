@@ -36,7 +36,10 @@ dataclass to the shared event queue.
 | `RawMouseClick` | Button pressed/released | x, y, button, pressed, t_ns |
 | `RawMouseScroll` | Scroll wheel | x, y, dx, dy, t_ns |
 
-Supports pause/resume via the global hotkey (`Ctrl+Alt+R`).
+**Button names:** `"left"`, `"right"`, `"middle"`, `"button4"`, `"button5"`.
+Side buttons (button4/button5) are typically Back/Forward but can be remapped
+by mouse driver software. User-defined labels are stored in per-user settings
+and recorded to `system_events` at session start.
 
 ### `keyboard_listener.py` — Keyboard Event Capture
 

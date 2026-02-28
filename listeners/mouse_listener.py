@@ -22,6 +22,8 @@ _BUTTON_MAP = {
     mouse.Button.left: "left",
     mouse.Button.right: "right",
     mouse.Button.middle: "middle",
+    mouse.Button.x1: "button4",
+    mouse.Button.x2: "button5",
 }
 
 
@@ -64,7 +66,7 @@ class MouseListener:
     def _on_click(self, x: int, y: int, button, pressed: bool):
         btn = _BUTTON_MAP.get(button)
         if btn is None:
-            return  # Unknown button (e.g. side buttons), skip
+            return
         self._queue.put(RawMouseClick(
             x=int(x), y=int(y), button=btn, pressed=pressed, t_ns=now_ns()
         ))

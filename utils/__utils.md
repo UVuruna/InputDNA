@@ -98,6 +98,8 @@ for estimating mouse polling rate from move event timestamps.
 | Mouse acceleration | `SystemParametersInfoW(SPI_GETMOUSE)` | `"True"` / `"False"` |
 | Screen resolution | `GetSystemMetrics` | `"1920x1080"` |
 | Keyboard layout | `GetKeyboardLayout` | `"0x04090409"` |
+| Mouse button 4 label | `config.MOUSE_BUTTON4_LABEL` | `"Back"` |
+| Mouse button 5 label | `config.MOUSE_BUTTON5_LABEL` | `"Forward"` |
 
 **Classes:**
 
