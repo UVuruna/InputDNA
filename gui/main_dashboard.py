@@ -490,8 +490,10 @@ class MainDashboard(QWidget):
         )
         if reply == QMessageBox.Yes:
             self._train_btn.setEnabled(False)
+            self._record_btn.setEnabled(False)
             self._train_progress.setVisible(True)
-            self._train_progress.setRange(0, 0)  # Indeterminate
+            self._train_progress.setRange(0, 100)
+            self._train_progress.setValue(0)
             self._model_status_label.setText("Training in progress...")
             self.train_model_signal.emit()
 
@@ -540,9 +542,16 @@ class MainDashboard(QWidget):
 
     # ── Public methods called from main.py ──────────────────
 
+    def on_training_progress(self, percent: int, message: str):
+        """Called during training to update progress bar."""
+        self._train_progress.setValue(percent)
+        self._model_status_label.setText(message)
+
     def on_training_complete(self, success: bool, message: str):
         """Called when training finishes."""
         self._train_btn.setEnabled(True)
+        if not self._recording:
+            self._record_btn.setEnabled(True)
         self._train_progress.setVisible(False)
         if success:
             self._model_status_label.setText(f"Model trained: {message}")

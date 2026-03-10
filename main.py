@@ -222,6 +222,8 @@ class MainWindow(QMainWindow):
     _sig_stop_recording = Signal()
     _sig_force_close = Signal()
     _sig_recording_stopped = Signal()
+    _sig_training_progress = Signal(int, str)   # percent, message
+    _sig_training_complete = Signal(bool, str)  # success, message
 
     # Screen indices in the stacked widget
     _LOGIN = 0
@@ -248,6 +250,8 @@ class MainWindow(QMainWindow):
         self._sig_stop_recording.connect(self._stop_recording_from_tray)
         self._sig_force_close.connect(self._force_close)
         self._sig_recording_stopped.connect(self._on_recording_stopped)
+        self._sig_training_progress.connect(self._on_training_progress)
+        self._sig_training_complete.connect(self._on_training_complete)
 
         # ── Stacked widget for screen navigation ──────────────
         self._stack = QStackedWidget()
@@ -325,6 +329,7 @@ class MainWindow(QMainWindow):
         self._dashboard = MainDashboard(profile)
         self._dashboard.start_recording_signal.connect(self._start_recording)
         self._dashboard.stop_recording_signal.connect(self._stop_recording)
+        self._dashboard.train_model_signal.connect(self._start_training)
         self._dashboard.settings_signal.connect(self._show_settings)
         self._dashboard.validate_model_signal.connect(self._show_validation)
         self._dashboard.logout_signal.connect(self._on_logout)
@@ -504,6 +509,45 @@ class MainWindow(QMainWindow):
 
             # Update login screen status (visible when user navigated Home)
             self._login_screen.update_recording_status(True, is_idle)
+
+    # ── Model training ────────────────────────────────────────
+
+    def _start_training(self):
+        """Start ML training in a background thread."""
+        if not self._user:
+            return
+
+        user_folder = config.get_user_folder(
+            self._user.username, self._user.surname, self._user.date_of_birth,
+        )
+
+        def _do_train():
+            try:
+                from ml.training import train_all
+                result = train_all(
+                    user_folder,
+                    progress_cb=lambda pct, msg: self._sig_training_progress.emit(pct, msg),
+                )
+                self._sig_training_complete.emit(result.success, result.summary)
+            except Exception as e:
+                logger.error(f"Training failed: {e}", exc_info=True)
+                self._sig_training_complete.emit(False, str(e))
+
+        threading.Thread(
+            target=_do_train, name="ml-training", daemon=True,
+        ).start()
+        logger.info("ML training started in background thread")
+
+    def _on_training_progress(self, percent: int, message: str):
+        """Forward training progress to dashboard (runs on Qt thread)."""
+        if self._dashboard:
+            self._dashboard.on_training_progress(percent, message)
+
+    def _on_training_complete(self, success: bool, message: str):
+        """Forward training completion to dashboard (runs on Qt thread)."""
+        if self._dashboard:
+            self._dashboard.on_training_complete(success, message)
+        logger.info(f"Training {'succeeded' if success else 'failed'}: {message}")
 
     # ── Tray icon ──────────────────────────────────────────────
 
