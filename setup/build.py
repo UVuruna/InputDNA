@@ -129,34 +129,28 @@ def build_pyinstaller():
             shutil.rmtree(d)
 
     # Packages that get pulled in as transitive dependencies
-    # but are not used by InputDNA at runtime
+    # but are not used by InputDNA at runtime.
+    # ONLY exclude packages we are 100% certain are not needed.
+    # Do NOT exclude stdlib modules (unittest, pydoc, etc.) — ML libs use them internally.
     exclude_modules = [
-        "setuptools",
-        "pkg_resources",
-        "charset_normalizer",
-        # "unittest",  # sklearn uses unittest internally
-        "xmlrpc",
-        "pydoc",
         "tkinter",
         # QWebEngine = Chromium (~500 MB). Docs viewer uses system browser instead.
         "PySide6.QtWebEngineWidgets",
         "PySide6.QtWebEngineCore",
         "PySide6.QtWebChannel",
         "PySide6.QtWebEngineQuick",
-        # ML: sklearn/scipy pull these as optional/transitive deps — we don't use them
+        # Deep learning frameworks — InputDNA uses only sklearn/scipy/numpy, not these
         "torch",
         "torchvision",
         "torchaudio",
         "tensorflow",
         "tensorboard",
         "keras",
+        # Heavy optional deps we don't use
         "matplotlib",
         "IPython",
         "notebook",
         "jupyter",
-        "pytest",
-        "py",
-        "pygments",
     ]
 
     # Modules PyInstaller fails to detect automatically
