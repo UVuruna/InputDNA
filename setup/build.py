@@ -131,7 +131,6 @@ def build_pyinstaller():
     # Packages that get pulled in as transitive dependencies
     # but are not used by InputDNA at runtime
     exclude_modules = [
-        "numpy",
         "setuptools",
         "pkg_resources",
         "charset_normalizer",
@@ -144,6 +143,20 @@ def build_pyinstaller():
         "PySide6.QtWebEngineCore",
         "PySide6.QtWebChannel",
         "PySide6.QtWebEngineQuick",
+        # ML: sklearn/scipy pull these as optional/transitive deps — we don't use them
+        "torch",
+        "torchvision",
+        "torchaudio",
+        "tensorflow",
+        "tensorboard",
+        "keras",
+        "matplotlib",
+        "IPython",
+        "notebook",
+        "jupyter",
+        "pytest",
+        "py",
+        "pygments",
     ]
 
     # Modules PyInstaller fails to detect automatically
