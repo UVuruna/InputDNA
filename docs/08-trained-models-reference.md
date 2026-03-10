@@ -14,6 +14,7 @@
   - [Speed Profile](#speed-profile)
   - [Overshoot Predictor](#overshoot-predictor)
   - [Micro-Jitter Generator](#micro-jitter-generator)
+  - [Click Behavior Model](#click-behavior-model)
 - [Keyboard Models](#keyboard-models)
   - [Text Typing Model](#text-typing-model)
   - [Number Typing Model](#number-typing-model)
@@ -32,7 +33,7 @@
 
 ## Overview
 
-InputDNA trains **8 specialized models** that together capture one user's unique input behavior — how they move the mouse and type on the keyboard. These models are an **ensemble** (not one monolithic model). Each handles a specific aspect of behavior.
+InputDNA trains **9 specialized models** that together capture one user's unique input behavior — how they move the mouse and type on the keyboard. These models are an **ensemble** (not one monolithic model). Each handles a specific aspect of behavior.
 
 The models are **statistical/KNN-based** (not deep learning). They use scikit-learn, scipy, and numpy. No GPU required for inference. All models are serialized as Python pickle files.
 
@@ -67,6 +68,7 @@ C:\Users\vurun\AppData\Local\InputDNA\db\Uros_Vuruna_1990-06-20\models\
 | `speed_profile.pkl` | Mouse speed curve | 1.5 KB |
 | `overshoot_model.pkl` | Overshoot probability + magnitude | 891 B |
 | `jitter_params.pkl` | Hand tremor parameters | 97 B |
+| `click_model.pkl` | Click behavior (press, pause, multi-click) | 1.3 KB |
 | `text_typing.pkl` | Text digraph timing table | 22 KB |
 | `number_typing.pkl` | Numpad digraph timing table | 3.4 KB |
 | `key_hold.pkl` | Per-key hold durations | 1.9 KB |
@@ -115,6 +117,7 @@ from ml.mouse.path_model import PathModel
 from ml.mouse.speed_model import SpeedModel
 from ml.mouse.overshoot_model import OvershootModel
 from ml.mouse.jitter_model import JitterModel
+from ml.mouse.click_model import ClickModel
 from ml.keyboard.text_model import TextTypingModel
 from ml.keyboard.number_model import NumberTypingModel
 from ml.keyboard.hold_model import HoldModel
@@ -124,6 +127,7 @@ path_model     = PathModel.load(models_dir / "path_generator.pkl")
 speed_model    = SpeedModel.load(models_dir / "speed_profile.pkl")
 overshoot      = OvershootModel.load(models_dir / "overshoot_model.pkl")
 jitter_model   = JitterModel.load(models_dir / "jitter_params.pkl")
+click_model    = ClickModel.load(models_dir / "click_model.pkl")
 text_model     = TextTypingModel.load(models_dir / "text_typing.pkl")
 number_model   = NumberTypingModel.load(models_dir / "number_typing.pkl")
 hold_model     = HoldModel.load(models_dir / "key_hold.pkl")
@@ -352,6 +356,100 @@ final_y = np.round(path_y + jy).astype(np.int32)
 
 ---
 
+<a id="click-behavior-model"></a>
+
+### Click Behavior Model
+
+**File:** `click_model.pkl` (~2 KB)
+**Class:** `ml.mouse.click_model.ClickModel`
+**Method:** Per-button statistical distributions + percentile-based pre-click pause + position-aware multi-click timing
+
+**What it does:** Captures the user's click characteristics: how long they hold each mouse button, how long they pause between arriving at a target and clicking, and the rhythm of multi-click sequences (double-click, triple-click, spam clicks).
+
+**This user's click characteristics:**
+- Left click press: **88.7 ms** (std 163ms — highly variable)
+- Right click press: **90.9 ms** (std 27ms — very consistent)
+- Pre-click pause median: **65 ms** (skewed distribution, range P10-P90)
+- Double-click gap: **176 ms** (1st→2nd), accelerates through spam sequences
+- 2nd click in sequence is slightly longer than 1st (95ms vs 88ms)
+
+**Three independent capabilities:**
+
+#### 1. Single Click Press Duration
+
+Sample how long to hold a mouse button down for a single click.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `button` | `str` | `"left"`, `"right"`, `"middle"`, `"button4"`, `"button5"` |
+| `rng` | `np.random.Generator` | Optional |
+
+**Returns:** `float` — press duration in milliseconds (always ≥ 5.0)
+
+```python
+click_model.sample_press_duration("left", rng=rng)    # ~88.7 ms
+click_model.sample_press_duration("right", rng=rng)   # ~90.9 ms
+click_model.sample_press_duration("button4", rng=rng)  # ~134.0 ms
+```
+
+#### 2. Pre-Click Pause
+
+Sample the delay between the mouse arriving at a target and the user clicking. Uses percentile interpolation for realistic right-skewed distribution.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `rng` | `np.random.Generator` | Optional |
+
+**Returns:** `float` — pause in milliseconds (always ≥ 1.0)
+
+```python
+pause = click_model.sample_pre_click_pause(rng=rng)  # ~65 ms (median)
+# Distribution is right-skewed: most pauses are short (30-100ms),
+# but occasional longer pauses (200-500ms) when aiming carefully
+```
+
+#### 3. Multi-Click Sequence
+
+Generate complete timing for double-click, triple-click, or spam-click sequences with per-position acceleration.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `click_count` | `int` | Number of clicks (2=double, 3=triple, 4+=spam) |
+| `rng` | `np.random.Generator` | Optional |
+
+**Returns:** `list[dict]` — one entry per click:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `press_duration_ms` | `float` | How long to hold the button for this click |
+| `delay_before_ms` | `float` | Gap after previous click's release (0 for 1st click) |
+
+```python
+clicks = click_model.sample_multiclick(2, rng=rng)
+# [
+#     {"press_duration_ms": 88.4, "delay_before_ms": 0.0},    # 1st click
+#     {"press_duration_ms": 94.5, "delay_before_ms": 176.0},  # 2nd click
+# ]
+
+# Spam clicking (5 clicks) — note acceleration:
+clicks = click_model.sample_multiclick(5, rng=rng)
+# [
+#     {"press_duration_ms": 88.0, "delay_before_ms": 0.0},    # 1st
+#     {"press_duration_ms": 95.0, "delay_before_ms": 176.0},  # 2nd (longest gap)
+#     {"press_duration_ms": 91.0, "delay_before_ms": 165.0},  # 3rd (faster)
+#     {"press_duration_ms": 89.0, "delay_before_ms": 159.0},  # 4th (faster)
+#     {"press_duration_ms": 87.0, "delay_before_ms": 157.0},  # 5th (stabilized)
+# ]
+```
+
+**Key patterns:**
+- `delay_before_ms` decreases through a spam sequence (acceleration)
+- 2nd click in a sequence has slightly longer `press_duration_ms` than 1st
+- Spam clicks stabilize at the last known interval after ~4-5 clicks
+- All values are sampled from Gaussian distributions (every call produces different results)
+
+---
+
 <a id="keyboard-models"></a>
 
 ## Keyboard Models
@@ -572,6 +670,7 @@ from ml.mouse.path_model import PathModel
 from ml.mouse.speed_model import SpeedModel
 from ml.mouse.overshoot_model import OvershootModel
 from ml.mouse.jitter_model import JitterModel
+from ml.mouse.click_model import ClickModel
 
 models_dir = Path("C:/Users/vurun/AppData/Local/InputDNA/db/Uros_Vuruna_1990-06-20/models")
 rng = np.random.default_rng()
@@ -581,6 +680,7 @@ path_model = PathModel.load(models_dir / "path_generator.pkl")
 speed_model = SpeedModel.load(models_dir / "speed_profile.pkl")
 overshoot = OvershootModel.load(models_dir / "overshoot_model.pkl")
 jitter = JitterModel.load(models_dir / "jitter_params.pkl")
+click_model = ClickModel.load(models_dir / "click_model.pkl")
 
 # ── Step 1: Generate base path ──────────────────────────────
 start_x, start_y = 100, 100
@@ -609,10 +709,24 @@ jx, jy = jitter.generate_jitter(len(path_x), dt_us, rng=rng)
 final_x = np.round(path_x + jx).astype(np.int32)
 final_y = np.round(path_y + jy).astype(np.int32)
 
+# ── Step 5: Generate click at destination ─────────────────
+# Pre-click pause (delay between arriving and clicking)
+pre_click_ms = click_model.sample_pre_click_pause(rng=rng)  # ~65ms
+
+# Single click press duration
+press_ms = click_model.sample_press_duration("left", rng=rng)  # ~88ms
+
+# Or for a double-click:
+# clicks = click_model.sample_multiclick(2, rng=rng)
+# clicks[0]["press_duration_ms"] → 1st click hold
+# clicks[1]["delay_before_ms"]   → gap between clicks
+# clicks[1]["press_duration_ms"] → 2nd click hold
+
 # ── Result ──────────────────────────────────────────────────
 # final_x, final_y: screen coordinates for each point
 # dt_us: microseconds between consecutive points
 # To replay: move cursor to (final_x[i], final_y[i]), wait dt_us[i+1] µs
+# Then wait pre_click_ms, press button for press_ms
 ```
 
 **Output format for replay:**
@@ -854,6 +968,7 @@ Training data statistics (from 17 days of recording, Feb 19 — Mar 8, 2026):
 | Speed Profile | `speed_profile.pkl` | 1.5 KB | instant |
 | Overshoot | `overshoot_model.pkl` | 891 B | instant |
 | Jitter | `jitter_params.pkl` | 97 B | instant |
+| Click Behavior | `click_model.pkl` | 1.3 KB | instant |
 | Text Typing | `text_typing.pkl` | 22 KB | instant |
 | Number Typing | `number_typing.pkl` | 3.4 KB | instant |
 | Key Hold | `key_hold.pkl` | 1.9 KB | instant |

@@ -24,6 +24,7 @@ flowchart LR
         SM[Speed Profile]
         OM[Overshoot]
         JM[Jitter]
+        CM[Click Behavior]
     end
 
     subgraph KB["Keyboard Models"]
@@ -64,6 +65,9 @@ Detects and models target overshoot (moving past the target and correcting back)
 ### `mouse/jitter_model.py` — Micro-Jitter
 Captures hand tremor characteristics. Extracts jitter amplitude from slow-movement segments by comparing raw path to smoothed version. Uses multi-octave sinusoidal noise at ~8Hz (human physiological tremor frequency) for generation.
 
+### `mouse/click_model.py` — Click Behavior
+Captures per-button press duration, pre-click pause (delay between arriving at target and clicking), and multi-click rhythm with acceleration pattern. Trains directly from `mouse.db` (reads `click_sequences`, `click_details`, and `movements` tables). Supports single clicks per button type, double/triple/spam click sequences with per-position timing, and percentile-based pre-click pause sampling for realistic skewed distributions.
+
 ### `keyboard/text_model.py` — Text Typing Digraph
 Per scan-code pair (from_key → to_key) timing distribution. Combines `text` and `code` typing modes. Falls back to global estimate adjusted by physical key distance for unseen pairs. Includes key position map for distance calculation.
 
@@ -85,6 +89,7 @@ Models are saved in the user's data folder:
   speed_profile.pkl       # Statistical percentiles
   overshoot_model.pkl     # LogReg + distributions
   jitter_params.pkl       # Amplitude + frequency
+  click_model.pkl         # Per-button press, pre-click pause, multi-click
   text_typing.pkl         # Digraph lookup table
   number_typing.pkl       # Numpad digraph table
   key_hold.pkl            # Per-key hold durations
@@ -124,6 +129,7 @@ The minimum jerk model from motor control theory already describes human movemen
 | Speed Profile | 30 movements | 5,000+ |
 | Overshoot | 100 click-movements | 1,000+ |
 | Jitter | 50 slow segments | 500+ |
+| Click Behavior | 5 per button | 100+ per button |
 | Text Digraph | 3 per pair | 50+ per pair |
 | Number Digraph | 3 per pair | 50+ per pair |
 | Key Hold | 3 per key | 100+ per key |
