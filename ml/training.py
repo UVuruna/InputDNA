@@ -6,7 +6,7 @@ Called from the GUI via the "Train Model" button.
 
 Runs the full pipeline:
 1. Preprocessing — load and clean data from SQLite
-2. Mouse models — path, speed, overshoot, jitter
+2. Mouse models — path, speed, overshoot, jitter, click
 3. Keyboard models — text digraph, number digraph, hold, shortcut
 4. Save all models to user's data folder
 
@@ -27,6 +27,7 @@ from ml.mouse.path_model import PathModel
 from ml.mouse.speed_model import SpeedModel
 from ml.mouse.overshoot_model import OvershootModel
 from ml.mouse.jitter_model import JitterModel
+from ml.mouse.click_model import ClickModel
 from ml.keyboard.text_model import TextTypingModel
 from ml.keyboard.number_model import NumberTypingModel
 from ml.keyboard.hold_model import HoldModel
@@ -43,6 +44,7 @@ _MODEL_FILES = {
     "speed": "speed_profile.pkl",
     "overshoot": "overshoot_model.pkl",
     "jitter": "jitter_params.pkl",
+    "click": "click_model.pkl",
     "text_typing": "text_typing.pkl",
     "number_typing": "number_typing.pkl",
     "key_hold": "key_hold.pkl",
@@ -173,15 +175,22 @@ def train_all(
         if overshoot_model.is_trained:
             overshoot_model.save(models_dir / _MODEL_FILES["overshoot"])
 
-        # Jitter Parameters (55-60%)
-        _progress(55, "Training jitter model...")
+        # Jitter Parameters (50-55%)
+        _progress(50, "Training jitter model...")
         jitter_model = JitterModel()
         metrics["jitter"] = jitter_model.train(mouse_data)
         if jitter_model.is_trained:
             jitter_model.save(models_dir / _MODEL_FILES["jitter"])
+
+        # Click Behavior (55-60%)
+        _progress(55, "Training click model...")
+        click_model = ClickModel()
+        metrics["click"] = click_model.train(mouse_db)
+        if click_model.is_trained:
+            click_model.save(models_dir / _MODEL_FILES["click"])
     else:
         _progress(20, "Skipping mouse models (no data)")
-        for key in ["path", "speed", "overshoot", "jitter"]:
+        for key in ["path", "speed", "overshoot", "jitter", "click"]:
             metrics[key] = {"status": "skipped", "reason": "no mouse database"}
 
     # ══════════════════════════════════════════════════════════
