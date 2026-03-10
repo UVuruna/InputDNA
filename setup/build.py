@@ -134,7 +134,7 @@ def build_pyinstaller():
         "setuptools",
         "pkg_resources",
         "charset_normalizer",
-        "unittest",
+        # "unittest",  # sklearn uses unittest internally
         "xmlrpc",
         "pydoc",
         "tkinter",
