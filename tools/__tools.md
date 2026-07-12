@@ -10,6 +10,7 @@ One-off scripts for database maintenance and migration. Not part of the recorder
 📁 tools/
   📝 __tools.md
   🐍 migrate_v1_to_v3.py
+  🐍 clean_corrupted_data.py
 ```
 
 <a id="files"></a>
@@ -60,6 +61,39 @@ python tools/migrate_v1_to_v3.py
 
 **Streaming:** path_points (3.5M+ rows) and drag_points (314K+ rows) are streamed
 grouped by parent ID — never fully loaded into memory. Batch size: 10,000 rows.
+
+### `clean_corrupted_data.py` — Remove Capture-Bug Artifacts (in place)
+
+Cleans two classes of corruption from databases recorded **before** the
+0.4.15x/0.4.16x capture fixes:
+
+1. **Keyboard auto-repeat** — a held key emitted `key_transitions` rows with
+   `from_scan == to_scan` at the OS repeat rate (~30 ms), flooding digraph /
+   flight-time distributions. Removed by scanning transitions in `id` order and
+   deleting same-key rows whose gap to the previous row is below
+   `--repeat-gap-ms` (default 60 ms). Genuine double-letters ("ll", "ee") sit
+   well above that and are kept; the first repeat of a hold (after the long
+   initial repeat delay) is intentionally kept too — the script errs toward
+   preserving real data.
+2. **Phantom drag clicks** — every drag also wrote a `click_details` row whose
+   `press_duration_ms` equals the whole drag. Removed by matching click rows
+   that fall inside a drag's `[start_t_ns, end_t_ns]` window **and** whose press
+   duration equals that drag's duration (tight tolerance, so a genuine click or
+   a cross-reboot `perf_counter` coincidence is never deleted). Sequences left
+   with no detail rows are then dropped.
+
+**Run from project root:**
+```
+python tools/clean_corrupted_data.py "<user folder>"            # clean in place
+python tools/clean_corrupted_data.py "<user folder>" --dry-run  # report only
+```
+
+The user folder is the one containing `mouse.db` and `keyboard.db`. A
+timestamped backup copy of each modified database is written next to it before
+any deletion. Run with the app closed (no active recording).
+
+> **Note:** New recordings tag auto-repeat via `key_transitions.is_repeat`; this
+> script is only for legacy data recorded before that column existed.
 
 <a id="design-decisions"></a>
 

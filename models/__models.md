@@ -37,8 +37,11 @@ us plus a precise timestamp.
 
 | Class | Trigger | Fields |
 |-------|---------|--------|
-| `RawKeyPress` | Key pressed | `scan_code`, `vkey`, `key_name`, `t_ns`, `modifier_state`, `active_layout` |
+| `RawKeyPress` | Key pressed | `scan_code`, `vkey`, `key_name`, `t_ns`, `modifier_state`, `active_layout`, `is_repeat` |
 | `RawKeyRelease` | Key released | `scan_code`, `key_name`, `t_ns`, `press_duration_ms` |
+
+> **`is_repeat`:** `True` when the OS delivered this key-down as auto-repeat (key
+> held, no intervening release). Detected in the listener via the press-time dict.
 
 > **Note:** All timestamps use `time.perf_counter_ns()` — monotonic, integer nanoseconds,
 > sub-microsecond precision. Never floats, never wall clock.
@@ -66,8 +69,8 @@ the writer which database to use.
 | Class | DB Table(s) | Description |
 |-------|-------------|-------------|
 | `MovementSession` | `movements` + `path_points` | Complete movement with full path; `start_t_ns`/`end_t_ns` bookends; app-generated `movement_id` |
-| `SingleClick` | — (embedded in ClickSequence) | One click within a sequence: `press_duration_ms`, `t_ns` |
-| `ClickSequence` | `click_sequences` + `click_details` | Group of clicks (1, 2, 3+); `button`, `clicks`, `movement_id` |
+| `SingleClick` | — (embedded in ClickSequence) | One click within a sequence: `press_duration_ms`, `x`, `y` (press position), `t_ns` |
+| `ClickSequence` | `click_sequences` + `click_details` | Group of clicks (1, 2, 3+); `button`, `clicks`, `movement_id` (bound at the first mouse-down) |
 | `DragRecord` | `drags` + `drag_points` | Click-hold-move-release; app-generated `drag_id`; `start_t_ns`/`end_t_ns` |
 | `ScrollEvent` | `scrolls` | Single scroll event: `delta`, `x`, `y`, `t_ns`, `movement_id` |
 
@@ -76,7 +79,7 @@ the writer which database to use.
 | Class | DB Table | Description |
 |-------|----------|-------------|
 | `KeystrokeRecord` | `keystrokes` | One key press: `scan_code`, `press_duration_ms`, `modifier_state` (bitmask), `t_ns` |
-| `KeyTransitionRecord` | `key_transitions` | Delay between two consecutive keys: `from_scan`, `to_scan`, `typing_mode`, `t_ns` |
+| `KeyTransitionRecord` | `key_transitions` | Delay between two consecutive keys: `from_scan`, `to_scan`, `typing_mode`, `t_ns`, `is_repeat` (1 = OS auto-repeat run) |
 | `ShortcutRecord` | `shortcuts` | Modifier+key combo timing profile |
 
 **Meta records:**

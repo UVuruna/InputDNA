@@ -40,7 +40,7 @@ Each user has **three separate databases**:
 | `movements` | Movement sessions with `start_t_ns`/`end_t_ns` bookends |
 | `path_points` | Delta-encoded path: seq=0 absolute (x,y), seq>0 (Δx,Δy,dt_us) |
 | `click_sequences` | Unified click tracking (single/double/spam) |
-| `click_details` | Individual clicks within sequences |
+| `click_details` | Individual clicks within sequences, incl. press `(x, y)` |
 | `drags` | Click-hold-move-release operations |
 | `drag_points` | Path coordinates during drags |
 | `scrolls` | Scroll wheel events |
@@ -50,8 +50,8 @@ Each user has **three separate databases**:
 
 | Table | Description |
 |-------|-------------|
-| `keystrokes` | Individual key presses with scan codes, vkey, and layout |
-| `key_transitions` | Delay between consecutive keys (scan code pairs) |
+| `keystrokes` | Individual key presses: scan code, press duration, modifier bitmask |
+| `key_transitions` | Delay between consecutive keys (scan code pairs); `is_repeat` flags OS auto-repeat |
 | `shortcuts` | Keyboard shortcut timing profiles |
 
 **Session tables:**
@@ -68,7 +68,9 @@ Each user has **three separate databases**:
 - `path_points`, `drag_points`, and `click_details` are **`WITHOUT ROWID`** tables with composite primary keys: `(movement_id, seq)`, `(drag_id, seq)`, `(sequence_id, seq)`. No hidden rowid — data stored directly in the PK B-tree. Eliminates the duplicate B-tree that a regular composite PK would create.
 - **Delta encoding:** `seq=0` stores absolute `(x, y)`, `dt_us=0`. `seq>0` stores `(Δx, Δy)` and `dt_us` (microseconds since previous point). **Timing reconstruction:** `t_ns[0] = start_t_ns`, `t_ns[i] = t_ns[i-1] + dt_us[i] × 1000`. Metadata key `path_encoding=delta_v3` in mouse.db signals this schema to readers.
 - `keystrokes.modifier_state` is stored as an **INTEGER bitmask** (bit 0=Ctrl, bit 1=Alt, bit 2=Shift, bit 3=Win), not a JSON string.
-- `click_details` uses composite primary key `(sequence_id, seq)` — no separate `id` column.
+- `click_details` uses composite primary key `(sequence_id, seq)` — no separate `id` column. Columns `x, y` hold the press (button-down) position; they are `NULL` for rows written before click coordinates were captured (legacy data).
+- `key_transitions.is_repeat` = `1` for OS auto-repeat runs (a held key firing `from_scan == to_scan` rows at the hardware repeat rate), `0` for genuine consecutive presses. Repeats are excluded from digraph/flight-time stats and kept only as a hold-to-repeat signal.
+- **Schema evolution:** columns added after the initial `delta_v3` release (`click_details.x/y`, `key_transitions.is_repeat`) are backfilled into existing databases by `_ensure_columns()` (idempotent `ALTER TABLE ADD COLUMN`), run inside the `init_*` functions. `CREATE TABLE IF NOT EXISTS` alone never alters an existing table, so this keeps old databases usable without a full migration.
 
 > **Schema version:** `path_encoding=delta_v3` in mouse.db metadata table. `delta_v1` = old schema (absolute `t_ns` per point, auto-increment `id`). `delta_v3` = current (delta `dt_us`, composite PK, WITHOUT ROWID). Post-processing must check this key before reading path data.
 

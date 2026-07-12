@@ -51,11 +51,17 @@ Maintains modifier state (`ctrl`, `alt`, `shift`, `win`) internally.
 
 | Event | Trigger | Data |
 |-------|---------|------|
-| `RawKeyPress` | Key pressed down | scan_code, vkey, key_name, t_ns, modifier_state, active_layout |
+| `RawKeyPress` | Key pressed down | scan_code, vkey, key_name, t_ns, modifier_state, active_layout, is_repeat |
 | `RawKeyRelease` | Key released | scan_code, key_name, t_ns, press_duration_ms |
 
 Calculates key press duration (press→release) and pushes completed
 `RawKeyRelease` events with duration attached.
+
+**Auto-repeat:** while a key is held, the OS fires repeated key-down events with
+no intervening release. The listener flags these on `RawKeyPress.is_repeat` (a scan
+code already present in the press-time dict = a repeat), so the processor can keep
+them out of digraph/shortcut timing while still recording them as a hold-to-repeat
+signal.
 
 **Key name resolution:** When a modifier is held (e.g. Ctrl+C), pynput gives
 `key.char` as the ASCII control character (`'\x03'`) instead of the letter.

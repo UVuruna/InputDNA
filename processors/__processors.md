@@ -31,9 +31,18 @@ Routes raw events from the shared queue to the correct sub-processor.
 Runs in a dedicated thread. Also periodically checks idle/sequence
 timeouts on sub-processors.
 
-**Cross-record linking:** Sets `movement_id` on `ClickSequence` and `ScrollEvent`
-records to the last completed movement's app-generated ID. When drag is first
-confirmed, explicitly ends any active movement session (`end_for_drag()`).
+**Cross-record linking:** `ScrollEvent` is linked to the last completed movement's
+app-generated ID at dispatch time. `ClickSequence.movement_id` is bound inside
+`ClickProcessor` at the sequence's **first mouse-down** (passed in from the dispatcher),
+not at finalize time — finalize happens `CLICK_SEQUENCE_GAP_MS` later and could
+otherwise point to a movement that started after the clicks. When drag is first
+confirmed, the dispatcher explicitly ends any active movement session (`end_for_drag()`).
+
+**Drag vs click (phantom-click guard):** The dispatcher captures `was_dragging`
+**before** calling `DragDetector.process_click`. A release that ends a drag resets
+`is_dragging` to `False` inside that call, so a post-call check would let the drag's
+release leak into `ClickProcessor` as a phantom click whose `press_duration` is the
+entire drag. Guarding on the pre-call state prevents that.
 
 **In-memory stats:** Maintains a `StatsTracker` instance with 19 named counters
 (mouse + keyboard). Stats are updated on every processed event and read by the
@@ -127,9 +136,18 @@ Processes keyboard events to produce three record types:
 
 | Record Type | What it captures |
 |-------------|------------------|
-| `KeystrokeRecord` | Individual key press: scan code, duration, hand/finger |
-| `KeyTransitionRecord` | Delay between consecutive keys (scan code pairs) |
+| `KeystrokeRecord` | Individual key press: scan code, press duration, modifier bitmask |
+| `KeyTransitionRecord` | Delay between consecutive keys (scan code pairs), `is_repeat` flag |
 | `ShortcutRecord` | Modifier+key combo with full timing profile, actual release order |
+
+**Auto-repeat handling:** The OS fires repeated key-down events while a key is held.
+The listener tags these (`RawKeyPress.is_repeat`), and `process_press` keeps them out
+of digraph timing and shortcut state: it does **not** update the last-key / modifier /
+main-key timestamps on a repeat, so ~30 ms repeat intervals never pollute flight-time
+distributions or overwrite a shortcut's press times. A repeat is instead recorded as a
+single `KeyTransitionRecord` with `from_scan == to_scan` and `is_repeat=1` — a
+hold-to-repeat behavioral signal, excluded from digraph stats in ML preprocessing.
+Repeats produce no extra `KeystrokeRecord` (only the single release does).
 
 **Shortcut timing validation:** `_try_emit_shortcut` validates all computed durations
 before emitting. Negative `main_hold` or `total` indicate stale processor state
