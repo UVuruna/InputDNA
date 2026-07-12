@@ -81,10 +81,12 @@ def speed_to_multiplier(speed: int) -> float:
 
 def get_screen_resolution() -> str:
     """
-    Get primary monitor resolution as 'WIDTHxHEIGHT' string.
-    Uses virtual screen metrics to account for multi-monitor setups.
+    Get PRIMARY monitor resolution as 'WIDTHxHEIGHT' string.
+
+    Uses SM_CXSCREEN/SM_CYSCREEN (primary monitor only). Multi-monitor virtual
+    geometry and per-monitor DPI are not captured here — see the Wave 2 audit
+    item on multi-monitor context.
     """
-    # SM_CXVIRTUALSCREEN=78, SM_CYVIRTUALSCREEN=79 (total virtual desktop)
     # SM_CXSCREEN=0, SM_CYSCREEN=1 (primary monitor)
     w = _user32.GetSystemMetrics(0)
     h = _user32.GetSystemMetrics(1)
@@ -120,12 +122,20 @@ def get_system_double_click_time() -> int:
 
 
 def get_all_state() -> dict[str, str]:
-    """Read all monitored system settings as a dict."""
+    """Read all monitored system settings as a dict.
+
+    Includes mouse DPI and estimated polling rate so an ML consumer reading the
+    per-user databases can normalize trajectories to physical hand motion.
+    Polling rate may be 'None' until the estimator stabilizes; the change
+    detector then records the real value once it is known.
+    """
     return {
         "mouse_speed": str(get_mouse_speed()),
         "mouse_acceleration": str(get_mouse_acceleration()),
         "screen_resolution": get_screen_resolution(),
         "keyboard_layout": get_keyboard_layout(),
+        "mouse_dpi": str(config.USER_DPI),
+        "polling_rate_hz": str(config.ESTIMATED_POLLING_HZ),
         "mouse_button4_label": config.MOUSE_BUTTON4_LABEL,
         "mouse_button5_label": config.MOUSE_BUTTON5_LABEL,
     }
