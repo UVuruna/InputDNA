@@ -37,9 +37,15 @@ class ClickProcessor:
         self._pending_clicks: list[SingleClick] = []
         self._pending_button: Optional[str] = None
         self._last_click_up_t_ns: int = 0
+        # Movement preceding this sequence, captured at the FIRST down (not at
+        # finalize time, which is >= CLICK_SEQUENCE_GAP_MS later and can point
+        # to a movement that started after the clicks).
+        self._pending_movement_id: Optional[int] = None
 
         # Current click being built (down → up)
         self._current_down_t_ns: int = 0
+        self._current_down_x: int = 0
+        self._current_down_y: int = 0
         self._current_button: Optional[str] = None
 
     @property
@@ -47,15 +53,16 @@ class ClickProcessor:
         """Whether there's a pending click sequence waiting for gap timeout."""
         return bool(self._pending_clicks)
 
-    def process_click(self, event: RawMouseClick):
+    def process_click(self, event: RawMouseClick, movement_id: Optional[int] = None):
         """
         Process a mouse click event (press or release).
 
-        Press: starts timing a click.
+        Press: starts timing a click. movement_id is the preceding movement
+        (from the session detector), recorded when a new sequence begins.
         Release: completes the click, adds to pending sequence.
         """
         if event.pressed:
-            self._handle_down(event)
+            self._handle_down(event, movement_id)
         else:
             self._handle_up(event)
 
@@ -76,13 +83,19 @@ class ClickProcessor:
         if self._pending_clicks:
             self._finalize_sequence()
 
-    def _handle_down(self, event: RawMouseClick):
+    def _handle_down(self, event: RawMouseClick, movement_id: Optional[int]):
         """Mouse button pressed."""
         # If this is a different button than pending sequence, finalize first
         if self._pending_clicks and event.button != self._pending_button:
             self._finalize_sequence()
 
+        # First down of a new sequence: bind the preceding movement now.
+        if not self._pending_clicks:
+            self._pending_movement_id = movement_id
+
         self._current_down_t_ns = event.t_ns
+        self._current_down_x = event.x
+        self._current_down_y = event.y
         self._current_button = event.button
 
     def _handle_up(self, event: RawMouseClick):
@@ -101,6 +114,8 @@ class ClickProcessor:
 
         click = SingleClick(
             press_duration_ms=press_duration,
+            x=self._current_down_x,
+            y=self._current_down_y,
             t_ns=self._current_down_t_ns,
         )
 
@@ -117,10 +132,11 @@ class ClickProcessor:
         seq = ClickSequence(
             button=self._pending_button,
             clicks=self._pending_clicks,
-            movement_id=None,  # Set by processor if linked to a movement
+            movement_id=self._pending_movement_id,
         )
 
         self._pending_clicks = []
         self._pending_button = None
+        self._pending_movement_id = None
 
         self._on_complete(seq)

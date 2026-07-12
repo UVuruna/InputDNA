@@ -35,6 +35,23 @@ def _init(db_path: Path, schema: str) -> sqlite3.Connection:
     return conn
 
 
+def _ensure_columns(conn: sqlite3.Connection, table: str,
+                    columns: list[tuple[str, str]]) -> None:
+    """
+    Add columns that are missing from an existing table (idempotent).
+
+    CREATE TABLE IF NOT EXISTS never alters an existing table, so a schema
+    that grows a column would silently keep the old layout on databases
+    created by an earlier version. This adds any missing column via
+    ALTER TABLE ADD COLUMN — a non-destructive, in-place operation that
+    backfills existing rows with the column default (NULL unless specified).
+    """
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for name, definition in columns:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
+
+
 # ══════════════════════════════════════════════════════════════
 # MOUSE DATABASE
 # ══════════════════════════════════════════════════════════════
@@ -80,12 +97,15 @@ CREATE TABLE IF NOT EXISTS click_sequences (
 
 -- Individual clicks within sequences
 -- No id column — composite PK (sequence_id, seq) is sufficient
--- x, y: derivable from click_sequences or movement end position
+-- x, y: press (button-down) position of this click. NULL for rows written
+--       before click coordinates were captured (legacy data).
 -- delay_since_prev_ms: derivable from t_ns differences in post-processing
 CREATE TABLE IF NOT EXISTS click_details (
     sequence_id       INTEGER NOT NULL REFERENCES click_sequences(id),
     seq               INTEGER NOT NULL,
     press_duration_ms REAL    NOT NULL,
+    x                 INTEGER,
+    y                 INTEGER,
     t_ns              INTEGER NOT NULL,
     PRIMARY KEY (sequence_id, seq)
 ) WITHOUT ROWID;
@@ -157,11 +177,15 @@ CREATE TABLE IF NOT EXISTS keystrokes (
 -- Delay between consecutive keys (scan code pairs)
 -- from_key_name, to_key_name: derivable from scan codes in post-processing
 -- delay_ms: derivable from t_ns differences in post-processing
+-- is_repeat: 1 = OS auto-repeat (held key), a from_scan==to_scan run at the
+--   hardware repeat rate. Excluded from digraph/flight-time stats; kept as a
+--   hold-to-repeat behavioral signal. 0 = genuine consecutive key press.
 CREATE TABLE IF NOT EXISTS key_transitions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     from_scan   INTEGER NOT NULL,
     to_scan     INTEGER NOT NULL,
     typing_mode TEXT    NOT NULL,
+    is_repeat   INTEGER NOT NULL DEFAULT 0,
     t_ns        INTEGER NOT NULL
 );
 
@@ -222,6 +246,11 @@ CREATE TABLE IF NOT EXISTS metadata (
 def init_mouse_db(db_path: Path) -> sqlite3.Connection:
     """Create mouse database with movement/click/drag/scroll tables."""
     conn = _init(db_path, _MOUSE_SCHEMA)
+    # Backfill columns added after the initial delta_v3 release.
+    _ensure_columns(conn, "click_details", [
+        ("x", "x INTEGER"),
+        ("y", "y INTEGER"),
+    ])
     # Signal schema version to post-processing readers
     conn.execute(
         "INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)",
@@ -233,7 +262,13 @@ def init_mouse_db(db_path: Path) -> sqlite3.Connection:
 
 def init_keyboard_db(db_path: Path) -> sqlite3.Connection:
     """Create keyboard database with keystroke/transition/shortcut tables."""
-    return _init(db_path, _KEYBOARD_SCHEMA)
+    conn = _init(db_path, _KEYBOARD_SCHEMA)
+    # Backfill columns added after the initial delta_v3 release.
+    _ensure_columns(conn, "key_transitions", [
+        ("is_repeat", "is_repeat INTEGER NOT NULL DEFAULT 0"),
+    ])
+    conn.commit()
+    return conn
 
 
 def init_session_db(db_path: Path) -> sqlite3.Connection:

@@ -180,8 +180,11 @@ class KeyboardListener:
         if mod:
             self._modifier_state[mod] = True
 
-        # Track press time (only first press, ignore key repeat)
-        if scan not in self._press_times:
+        # Auto-repeat detection: the OS fires repeated key-down events while a
+        # key is held, with no intervening release. A scan already present in
+        # _press_times means this key-down is a repeat, not a fresh press.
+        is_repeat = scan in self._press_times
+        if not is_repeat:
             self._press_times[scan] = t
 
         self._queue.put(RawKeyPress(
@@ -191,6 +194,7 @@ class KeyboardListener:
             t_ns=t,
             modifier_state=self._modifier_state.copy(),
             active_layout=_get_active_layout(),
+            is_repeat=is_repeat,
         ))
 
     def _on_release(self, key):

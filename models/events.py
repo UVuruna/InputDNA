@@ -51,6 +51,7 @@ class RawKeyPress:
     t_ns: int
     modifier_state: dict    # {"ctrl": bool, "alt": bool, "shift": bool, "win": bool}
     active_layout: str      # Keyboard layout ID at time of press
+    is_repeat: bool         # True = OS auto-repeat (key held), not a fresh press
 
 @dataclass(slots=True)
 class RawKeyRelease:

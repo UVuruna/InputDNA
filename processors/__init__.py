@@ -169,10 +169,17 @@ class EventProcessor:
             self._mouse_session.process_move(event)
 
         elif isinstance(event, RawMouseClick):
+            # Capture drag state BEFORE process_click: a release that ends a
+            # drag resets is_dragging to False inside the call, so checking it
+            # afterwards would let the drag's release leak into ClickProcessor
+            # as a phantom click whose press_duration is the whole drag.
+            was_dragging = self._drag_det.is_dragging
             self._drag_det.process_click(event)
-            if not self._drag_det.is_dragging:
+            if not was_dragging and not self._drag_det.is_dragging:
                 self._mouse_session.process_click(event)
-                self._click_proc.process_click(event)
+                self._click_proc.process_click(
+                    event, self._mouse_session.last_completed_movement_id
+                )
 
         elif isinstance(event, RawMouseScroll):
             self._mouse_session.process_scroll(event)
@@ -215,7 +222,7 @@ class EventProcessor:
         elif click_count > 3:
             s.increment("spam_clicks")
 
-        seq.movement_id = self._mouse_session.last_completed_movement_id
+        # seq.movement_id was bound at the sequence's first down (ClickProcessor)
         self._db.put(seq)
 
     def _on_drag(self, drag: DragRecord):

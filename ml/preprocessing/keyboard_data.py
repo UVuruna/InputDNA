@@ -93,9 +93,15 @@ def load_keyboard_data(db_path: Path, progress_cb=None) -> KeyboardDataset:
     if progress_cb:
         progress_cb(0, "Loading key transitions...")
 
+    # Exclude OS auto-repeat rows (is_repeat=1) from digraph timing — they are
+    # held-key artifacts, not genuine key-to-key transitions. The column is
+    # absent in databases created before auto-repeat tagging; those contain no
+    # tagged rows, so no filter is needed there.
+    _kt_cols = {row[1] for row in conn.execute("PRAGMA table_info(key_transitions)")}
+    _repeat_filter = "WHERE is_repeat = 0 " if "is_repeat" in _kt_cols else ""
     cursor = conn.execute(
         "SELECT from_scan, to_scan, typing_mode, t_ns "
-        "FROM key_transitions ORDER BY id"
+        f"FROM key_transitions {_repeat_filter}ORDER BY id"
     )
     raw_transitions = cursor.fetchall()
     logger.info(f"  Loaded {len(raw_transitions):,} transitions")

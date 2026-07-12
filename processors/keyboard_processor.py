@@ -145,6 +145,24 @@ class KeyboardProcessor:
         is_mod = scan in MODIFIER_SCANS
         bitmask = _modifier_bitmask(event.modifier_state)
 
+        # OS auto-repeat (held key): keep it out of digraph and shortcut timing
+        # so ~30 ms repeat intervals don't pollute flight-time distributions or
+        # overwrite the modifier/main-key press timestamps. Preserve it as a
+        # hold-to-repeat signal (one from_scan==to_scan row per repeat) for
+        # non-modifier keys, mirroring the rule that transitions track only
+        # non-modifier keys. Do NOT update _last_* / _press_context / shortcut
+        # state — the held key's original press context still stands.
+        if event.is_repeat:
+            if not is_mod:
+                self._on_transition(KeyTransitionRecord(
+                    from_scan=scan,
+                    to_scan=scan,
+                    typing_mode=_detect_typing_mode(scan, bitmask),
+                    t_ns=event.t_ns,
+                    is_repeat=1,
+                ))
+            return
+
         # Store modifier bitmask at press time, retrieved on release
         self._press_context[scan] = bitmask
 

@@ -103,6 +103,8 @@ class MovementSession:
 class SingleClick:
     """One click within a click sequence."""
     press_duration_ms: float
+    x: int              # Press (button-down) position
+    y: int
     t_ns: int
 
 
@@ -127,9 +129,9 @@ class ClickSequence:
         seq_id = cur.lastrowid
         cur.executemany(
             """INSERT INTO click_details
-               (sequence_id, seq, press_duration_ms, t_ns)
-               VALUES (?,?,?,?)""",
-            [(seq_id, i, c.press_duration_ms, c.t_ns)
+               (sequence_id, seq, press_duration_ms, x, y, t_ns)
+               VALUES (?,?,?,?,?,?)""",
+            [(seq_id, i, c.press_duration_ms, c.x, c.y, c.t_ns)
              for i, c in enumerate(self.clicks)]
         )
 
@@ -213,13 +215,15 @@ class KeyTransitionRecord:
     to_scan: int
     typing_mode: str            # "text", "shortcut", "numpad", "code"
     t_ns: int
+    is_repeat: int = 0          # 1 = OS auto-repeat run (held key), not a digraph
 
     def write_to_db(self, conn):
         conn.execute(
             """INSERT INTO key_transitions
-               (from_scan, to_scan, typing_mode, t_ns)
-               VALUES (?,?,?,?)""",
-            (self.from_scan, self.to_scan, self.typing_mode, self.t_ns)
+               (from_scan, to_scan, typing_mode, is_repeat, t_ns)
+               VALUES (?,?,?,?,?)""",
+            (self.from_scan, self.to_scan, self.typing_mode,
+             self.is_repeat, self.t_ns)
         )
 
 
