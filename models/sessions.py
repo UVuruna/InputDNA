@@ -118,13 +118,15 @@ class ClickSequence:
 
     button: str                     # "left", "right", "middle"
     clicks: List[SingleClick]
-    movement_id: Optional[int]      # Preceding movement (set after movement is written)
+    movement_id: Optional[int]      # Preceding movement (bound at first mouse-down)
+    recording_session_id: int = 0   # Owning recording session (set by EventProcessor)
 
     def write_to_db(self, conn):
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO click_sequences (movement_id, button) VALUES (?,?)",
-            (self.movement_id, self.button)
+            "INSERT INTO click_sequences (movement_id, button, recording_session_id) "
+            "VALUES (?,?,?)",
+            (self.movement_id, self.button, self.recording_session_id)
         )
         seq_id = cur.lastrowid
         cur.executemany(
@@ -171,15 +173,24 @@ class ScrollEvent:
     _db_target = "mouse"
 
     movement_id: Optional[int]  # Preceding movement (nullable)
-    delta: int                  # Scroll amount (positive=up/right, negative=down/left)
+    dx: int                     # Horizontal scroll (+right / -left)
+    dy: int                     # Vertical scroll (+up / -down)
     x: int
     y: int
     t_ns: int
+    recording_session_id: int = 0
+
+    @property
+    def delta(self) -> int:
+        """Legacy merged scroll amount: vertical if present, else horizontal."""
+        return self.dy if self.dy != 0 else self.dx
 
     def write_to_db(self, conn):
         conn.execute(
-            "INSERT INTO scrolls (movement_id, delta, x, y, t_ns) VALUES (?,?,?,?,?)",
-            (self.movement_id, self.delta, self.x, self.y, self.t_ns)
+            "INSERT INTO scrolls (movement_id, delta, dx, dy, x, y, t_ns, "
+            "recording_session_id) VALUES (?,?,?,?,?,?,?,?)",
+            (self.movement_id, self.delta, self.dx, self.dy, self.x, self.y,
+             self.t_ns, self.recording_session_id)
         )
 
 
@@ -196,13 +207,16 @@ class KeystrokeRecord:
     press_duration_ms: float
     modifier_state: int         # Bitmask: bit0=Ctrl, bit1=Alt, bit2=Shift, bit3=Win
     t_ns: int
+    recording_session_id: int = 0
 
     def write_to_db(self, conn):
         conn.execute(
             """INSERT INTO keystrokes
-               (scan_code, press_duration_ms, modifier_state, t_ns)
-               VALUES (?,?,?,?)""",
-            (self.scan_code, self.press_duration_ms, self.modifier_state, self.t_ns)
+               (scan_code, press_duration_ms, modifier_state, t_ns,
+                recording_session_id)
+               VALUES (?,?,?,?,?)""",
+            (self.scan_code, self.press_duration_ms, self.modifier_state,
+             self.t_ns, self.recording_session_id)
         )
 
 
@@ -216,14 +230,16 @@ class KeyTransitionRecord:
     typing_mode: str            # "text", "shortcut", "numpad", "code"
     t_ns: int
     is_repeat: int = 0          # 1 = OS auto-repeat run (held key), not a digraph
+    recording_session_id: int = 0
 
     def write_to_db(self, conn):
         conn.execute(
             """INSERT INTO key_transitions
-               (from_scan, to_scan, typing_mode, is_repeat, t_ns)
-               VALUES (?,?,?,?,?)""",
+               (from_scan, to_scan, typing_mode, is_repeat, t_ns,
+                recording_session_id)
+               VALUES (?,?,?,?,?,?)""",
             (self.from_scan, self.to_scan, self.typing_mode,
-             self.is_repeat, self.t_ns)
+             self.is_repeat, self.t_ns, self.recording_session_id)
         )
 
 
@@ -240,16 +256,17 @@ class ShortcutRecord:
     total_ms: float             # Full execution time
     release_order: str          # "main_first" or "modifier_first"
     t_ns: int
+    recording_session_id: int = 0
 
     def write_to_db(self, conn):
         conn.execute(
             """INSERT INTO shortcuts
                (modifier_scans, main_scan, modifier_to_main_ms, main_hold_ms,
-                overlap_ms, total_ms, release_order, t_ns)
-               VALUES (?,?,?,?,?,?,?,?)""",
+                overlap_ms, total_ms, release_order, t_ns, recording_session_id)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
             (self.modifier_scans, self.main_scan, self.modifier_to_main_ms,
              self.main_hold_ms, self.overlap_ms, self.total_ms,
-             self.release_order, self.t_ns)
+             self.release_order, self.t_ns, self.recording_session_id)
         )
 
 
@@ -290,6 +307,7 @@ class RecordingSessionRecord:
     total_clicks: int = 0
     total_keystrokes: int = 0
     perf_counter_start_ns: int = 0
+    perf_counter_end_ns: Optional[int] = None
     _db_id: Optional[int] = None
 
     def write_start(self, conn):
@@ -308,8 +326,9 @@ class RecordingSessionRecord:
             return
         conn.execute(
             """UPDATE recording_sessions
-               SET ended_at=?, total_movements=?, total_clicks=?, total_keystrokes=?
+               SET ended_at=?, total_movements=?, total_clicks=?,
+                   total_keystrokes=?, perf_counter_end_ns=?
                WHERE id=?""",
             (self.ended_at, self.total_movements, self.total_clicks,
-             self.total_keystrokes, self._db_id)
+             self.total_keystrokes, self.perf_counter_end_ns, self._db_id)
         )

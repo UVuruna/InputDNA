@@ -180,6 +180,7 @@ class Recorder:
         if self._recording_session and self._processor:
             t = self._processor.stats.get_totals()
             self._recording_session.ended_at = wall_clock_iso()
+            self._recording_session.perf_counter_end_ns = now_ns()
             self._recording_session.total_movements = t["movements"]
             self._recording_session.total_clicks = t["clicks"]
             self._recording_session.total_keystrokes = t["keystrokes"]

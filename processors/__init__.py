@@ -20,7 +20,7 @@ from models.events import (
 )
 from models.sessions import (
     MovementSession, ClickSequence, DragRecord, ScrollEvent,
-    KeystrokeRecord, KeyTransitionRecord, ShortcutRecord,
+    KeystrokeRecord, KeyTransitionRecord, ShortcutRecord, SystemEventRecord,
 )
 from processors.mouse_session import MouseSessionDetector
 from processors.click_processor import ClickProcessor
@@ -31,7 +31,7 @@ from processors.keyboard_processor import (
     LETTER_SCANS, NUMBER_ROW_SCANS, WHITESPACE_SCANS, CAPSLOCK_SCAN,
 )
 from database.writer import DatabaseWriter
-from utils.timing import now_ns
+from utils.timing import now_ns, wall_clock_iso
 from utils.stats_tracker import StatsTracker
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,7 @@ class EventProcessor:
                  recording_session_id: int = 0):
         self._event_queue = event_queue
         self._db = db_writer
+        self._recording_session_id = recording_session_id
         self._running = False
         self._thread: threading.Thread | None = None
 
@@ -104,6 +105,9 @@ class EventProcessor:
 
         # Last event timestamp for idle detection (cosmetic tray icon)
         self._last_event_ns: int = 0
+
+        # Last seen keyboard layout (per-press HKL) for change tracking
+        self._last_layout: str | None = None
 
     def start(self):
         """Start processor thread."""
@@ -154,6 +158,24 @@ class EventProcessor:
         """Timestamp of the most recent event (for idle detection)."""
         return self._last_event_ns
 
+    def _track_layout_change(self, event: RawKeyPress):
+        """Emit a system event when the active keyboard layout changes.
+
+        The listener resolves the layout (HKL) on every press; persisting only
+        on change gives per-keystroke-accurate layout attribution at near-zero
+        storage cost — enough to reconstruct which layout produced each key even
+        when the user toggles layouts mid-typing (finer than the 10 s poll).
+        """
+        layout = event.active_layout
+        if layout != self._last_layout:
+            self._last_layout = layout
+            self._db.put(SystemEventRecord(
+                key="keyboard_layout_hkl",
+                value=layout,
+                t_ns=event.t_ns,
+                timestamp=wall_clock_iso(),
+            ))
+
     def _dispatch(self, event):
         """Route raw event to appropriate sub-processor."""
         self._last_event_ns = event.t_ns
@@ -186,13 +208,16 @@ class EventProcessor:
             self.stats.increment("scrolls")
             self._db.put(ScrollEvent(
                 movement_id=self._mouse_session.last_completed_movement_id,
-                delta=event.dy if event.dy != 0 else event.dx,
+                dx=event.dx,
+                dy=event.dy,
                 x=event.x,
                 y=event.y,
                 t_ns=event.t_ns,
+                recording_session_id=self._recording_session_id,
             ))
 
         elif isinstance(event, RawKeyPress):
+            self._track_layout_change(event)
             self._kb_proc.process_press(event)
 
         elif isinstance(event, RawKeyRelease):
@@ -205,6 +230,7 @@ class EventProcessor:
         self._db.put(session)
 
     def _on_click_sequence(self, seq: ClickSequence):
+        seq.recording_session_id = self._recording_session_id
         s = self.stats
         click_count = len(seq.clicks)
         s.increment("clicks", click_count)
@@ -230,6 +256,7 @@ class EventProcessor:
         self._db.put(drag)
 
     def _on_keystroke(self, rec: KeystrokeRecord):
+        rec.recording_session_id = self._recording_session_id
         scan = rec.scan_code
 
         # Skip modifier keys from keystroke count and classification
@@ -285,8 +312,10 @@ class EventProcessor:
         return "other_keys"
 
     def _on_transition(self, rec: KeyTransitionRecord):
+        rec.recording_session_id = self._recording_session_id
         self._db.put(rec)
 
     def _on_shortcut(self, rec: ShortcutRecord):
+        rec.recording_session_id = self._recording_session_id
         self.stats.increment("shortcuts")
         self._db.put(rec)
