@@ -75,7 +75,8 @@ try:
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
     _log_file = config.LOG_DIR / "inputdna.log"
     _file_handler = logging.handlers.TimedRotatingFileHandler(
-        _log_file, when="midnight", backupCount=7, encoding="utf-8"
+        _log_file, when="midnight", backupCount=config.LOG_BACKUP_DAYS,
+        encoding="utf-8",
     )
     _file_handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
     logging.getLogger().addHandler(_file_handler)
@@ -235,7 +236,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"InputDNA {__version__} — Human Input Recorder")
-        self.resize(900, 700)
+        self.resize(config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
 
         self._user: UserProfile | None = None
         self._recorder: Recorder | None = None
@@ -304,7 +305,7 @@ class MainWindow(QMainWindow):
         self._stop_polling_estimation = start_polling_estimation(
             on_done=self._on_polling_rate_estimated,
         )
-        self._polling_check_timer.start(500)
+        self._polling_check_timer.start(config.POLLING_CHECK_INTERVAL_MS)
 
         # Create screens that need user context
         self._create_user_screens(profile)
@@ -428,7 +429,7 @@ class MainWindow(QMainWindow):
             self._tray.set_recording()
 
         # Start stats update timer
-        self._stats_timer.start(1000)
+        self._stats_timer.start(config.STATS_REFRESH_INTERVAL_MS)
 
         # Start system monitor
         self._start_system_monitor()

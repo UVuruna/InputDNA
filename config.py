@@ -203,6 +203,22 @@ STATS_WINDOW_MINUTES = 30
 CALIBRATION_CLICK_COUNT = 20
 
 # ─────────────────────────────────────────────────────────────
+# GUI / TIMERS / LOGGING
+# ─────────────────────────────────────────────────────────────
+# How often the dashboard refreshes live stats (milliseconds).
+STATS_REFRESH_INTERVAL_MS = 1000
+
+# How often, after login, to poll for a stabilized mouse polling-rate estimate.
+POLLING_CHECK_INTERVAL_MS = 500
+
+# Days of rotated daily log files to retain.
+LOG_BACKUP_DAYS = 7
+
+# Initial main window size (pixels).
+WINDOW_WIDTH = 900
+WINDOW_HEIGHT = 700
+
+# ─────────────────────────────────────────────────────────────
 # USER SETTINGS (GUI-configurable)
 # ─────────────────────────────────────────────────────────────
 # Mouse DPI — hardware-specific, entered manually or measured by user.

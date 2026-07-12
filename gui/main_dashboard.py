@@ -43,7 +43,7 @@ class MainDashboard(QWidget):
         # Stats update timer
         self._stats_timer = QTimer(self)
         self._stats_timer.timeout.connect(self._update_stats_display)
-        self._stats_timer.start(1000)  # Update every second
+        self._stats_timer.start(config.STATS_REFRESH_INTERVAL_MS)
 
         # Stats data (updated externally via update_stats)
         self._totals: dict[str, int] = {}
