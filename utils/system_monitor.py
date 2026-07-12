@@ -15,6 +15,8 @@ Polling rate is estimated separately from mouse move event timestamps
 """
 
 import ctypes
+import ctypes.wintypes
+import json
 import logging
 import statistics
 import threading
@@ -29,6 +31,25 @@ from utils.timing import now_ns, wall_clock_iso
 logger = logging.getLogger(__name__)
 
 _user32 = ctypes.windll.user32
+_kernel32 = ctypes.windll.kernel32
+
+# shcore (Win 8.1+) provides per-monitor DPI; absent on older Windows.
+try:
+    _shcore = ctypes.windll.shcore
+except OSError:
+    _shcore = None
+
+
+class _RECT(ctypes.Structure):
+    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+
+# EnumDisplayMonitors callback: (HMONITOR, HDC, LPRECT, LPARAM) -> BOOL
+_MONITORENUMPROC = ctypes.WINFUNCTYPE(
+    ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p,
+    ctypes.POINTER(_RECT), ctypes.c_double,
+)
 
 # ─────────────────────────────────────────────────────────────
 # SYSTEM STATE READERS
@@ -112,6 +133,61 @@ def get_keyboard_layout() -> str:
     return hex(layout_id & 0xFFFFFFFF)
 
 
+def get_foreground_process() -> str:
+    """Executable name of the process owning the foreground window (e.g. 'chrome.exe').
+
+    Only the process NAME is captured — never the window title — so no readable
+    content (URLs, file names) is stored. This is the cheapest context signal
+    that lets post-processing condition behavior on the active application
+    (IDE vs chat vs game vs browser). Returns 'unknown' if it cannot resolve.
+    """
+    try:
+        hwnd = _user32.GetForegroundWindow()
+        pid = ctypes.wintypes.DWORD()
+        _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = _kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+        if not handle:
+            return "unknown"
+        try:
+            buf = ctypes.create_unicode_buffer(512)
+            size = ctypes.wintypes.DWORD(512)
+            if _kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+                return buf.value.rsplit("\\", 1)[-1]
+            return "unknown"
+        finally:
+            _kernel32.CloseHandle(handle)
+    except Exception:
+        logger.exception("get_foreground_process failed")
+        return "unknown"
+
+
+def get_monitors() -> str:
+    """JSON list of monitors: [{"rect": [left, top, right, bottom], "dpi": int}, ...].
+
+    Captures the full multi-monitor virtual geometry and per-monitor DPI so a
+    trajectory on a secondary or mixed-DPI monitor can be placed correctly in
+    post-processing. Falls back to 96 DPI where shcore is unavailable.
+    """
+    monitors: list[dict] = []
+    try:
+        def _cb(hmon, hdc, lprc, data):
+            r = lprc.contents
+            dpi = 96
+            if _shcore is not None:
+                dx, dy = ctypes.c_uint(), ctypes.c_uint()
+                # MDT_EFFECTIVE_DPI = 0; returns S_OK (0) on success
+                if _shcore.GetDpiForMonitor(hmon, 0, ctypes.byref(dx), ctypes.byref(dy)) == 0:
+                    dpi = dx.value
+            monitors.append({"rect": [r.left, r.top, r.right, r.bottom], "dpi": dpi})
+            return 1
+        _user32.EnumDisplayMonitors(None, None, _MONITORENUMPROC(_cb), 0)
+    except Exception:
+        logger.exception("get_monitors failed")
+    return json.dumps(monitors)
+
+
 def get_system_double_click_time() -> int:
     """
     Get Windows system double-click time in milliseconds.
@@ -133,7 +209,9 @@ def get_all_state() -> dict[str, str]:
         "mouse_speed": str(get_mouse_speed()),
         "mouse_acceleration": str(get_mouse_acceleration()),
         "screen_resolution": get_screen_resolution(),
+        "monitors": get_monitors(),
         "keyboard_layout": get_keyboard_layout(),
+        "foreground_app": get_foreground_process(),
         "mouse_dpi": str(config.USER_DPI),
         "polling_rate_hz": str(config.ESTIMATED_POLLING_HZ),
         "mouse_button4_label": config.MOUSE_BUTTON4_LABEL,
