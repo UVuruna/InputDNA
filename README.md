@@ -185,8 +185,9 @@ flowchart LR
   📁 utils/                           Shared utilities
     🐍 timing.py                      perf_counter_ns wrappers
     🐍 keyboard_layout.py             Scan code → hand/finger map
-    🐍 hotkeys.py                     Pause/resume hotkey (Ctrl+Alt+R)
-    🐍 system_monitor.py              Mouse speed, resolution, layout tracking
+    🐍 system_monitor.py              Mouse speed, resolution, layout, DPI, app context
+    🐍 stats_tracker.py               In-memory dashboard counters
+    🐍 hotkeys.py                     Pause/resume hotkey (Ctrl+Alt+R) — PLANNED, not built
   📁 ui/                              System tray interface
     🐍 tray_icon.py                   pystray: green/yellow/red status
     🖼️ InputDNA-start.png             Tray icon (recording)
@@ -242,7 +243,7 @@ Each module folder has its own documentation file (`__folder.md`):
 | `listeners/` | [`__listeners.md`](listeners/__listeners.md) | Mouse & keyboard OS hooks, scan codes |
 | `processors/` | [`__processors.md`](processors/__processors.md) | Session detection, click grouping, keyboard processing |
 | `models/` | [`__models.md`](models/__models.md) | Raw events & processed records (dataclasses) |
-| `utils/` | [`__utils.md`](utils/__utils.md) | Timing, keyboard layout, hotkeys |
+| `utils/` | [`__utils.md`](utils/__utils.md) | Timing, keyboard layout, system monitor, stats |
 | `ui/` | [`__ui.md`](ui/__ui.md) | System tray icon (pystray) |
 | `gui/` | [`__gui.md`](gui/__gui.md) | PySide6 desktop GUI (login, dashboard, validation) |
 | `data/` | [`__data.md`](data/__data.md) | Runtime database location |
@@ -324,7 +325,7 @@ reconstruction formulas for removed columns, and storage savings projections.
 ```bash
 python main.py
 # Use your computer normally — mouse and keyboard data is captured
-# Ctrl+Alt+R to pause/resume, system tray icon shows status
+# System tray icon shows status (Ctrl+Alt+R pause/resume hotkey is planned)
 ```
 
 ### Phase 2: Training

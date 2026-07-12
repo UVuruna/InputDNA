@@ -64,7 +64,9 @@ human-input-recorder/
 │   ├── __init__.py
 │   ├── timing.py                    # perf_counter wrappers
 │   ├── keyboard_layout.py           # QWERTY map, finger/hand inference
-│   └── hotkeys.py                   # Pause/resume hotkey
+│   ├── system_monitor.py            # System state + polling-rate estimator
+│   ├── stats_tracker.py             # In-memory dashboard counters
+│   └── hotkeys.py                   # Pause/resume hotkey (PLANNED — not built)
 │
 ├── ui/
 │   ├── __init__.py
@@ -97,7 +99,8 @@ main():
     9. On quit: stop listeners, flush writer, close DB
 ```
 
-Hotkey Ctrl+Alt+R pauses/resumes all listeners.
+> **Planned (not yet implemented):** a global hotkey (Ctrl+Alt+R) to
+> pause/resume all listeners.
 
 ---
 
@@ -147,7 +150,7 @@ All timestamps: `time.perf_counter_ns()` (integer nanoseconds, no float precisio
 
 Pushes raw events to shared `queue.Queue` for processor.
 
-Has `pause()` / `resume()` methods for hotkey control.
+*Planned:* `pause()` / `resume()` methods for hotkey control (not yet implemented).
 
 #### `keyboard_listener.py`
 
@@ -748,9 +751,9 @@ def same_finger(sc1: int, sc2: int) -> bool: ...
 This works for ANY keyboard layout (English, Serbian Latin, Serbian Cyrillic, etc.)
 because scan codes are based on physical position, not character mapping.
 
-#### `hotkeys.py`
+#### `hotkeys.py` (planned — not yet implemented)
 
-Global hotkey registration for pause/resume:
+Global hotkey registration for pause/resume (design sketch, no file exists yet):
 
 ```python
 # Using pynput.keyboard.GlobalHotKeys

@@ -50,7 +50,7 @@ Phase 4: Replay Engine (Future)
 - [listeners/__listeners.md](listeners/__listeners.md) — Mouse & keyboard hooks, scan codes
 - [processors/__processors.md](processors/__processors.md) — Session detection, click grouping, keyboard processing
 - [models/__models.md](models/__models.md) — Raw events vs processed records
-- [utils/__utils.md](utils/__utils.md) — Timing, keyboard layout, hotkeys
+- [utils/__utils.md](utils/__utils.md) — Timing, keyboard layout, system monitor, stats
 - [ui/__ui.md](ui/__ui.md) — System tray icon
 - [gui/__gui.md](gui/__gui.md) — PySide6 desktop GUI (login, dashboard, validation)
 - [data/__data.md](data/__data.md) — Runtime database location

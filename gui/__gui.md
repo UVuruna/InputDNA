@@ -131,7 +131,7 @@ Per-user configurable options stored in `profiles.db` via the `user_settings` ta
 | Session timeout | Slider | 100-1000 ms | 300 ms |
 | Min session distance | Slider | 0-20 px | 3 px |
 | DB max size | Dropdown | 1-10 GB | 5 GB |
-| Pause hotkey | Key sequence | Any combo | Ctrl+Alt+R |
+| Pause hotkey *(planned)* | Key sequence | Any combo | Ctrl+Alt+R |
 
 **System settings:**
 
