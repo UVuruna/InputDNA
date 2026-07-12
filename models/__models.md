@@ -72,7 +72,7 @@ the writer which database to use.
 | `SingleClick` | — (embedded in ClickSequence) | One click within a sequence: `press_duration_ms`, `x`, `y` (press position), `t_ns` |
 | `ClickSequence` | `click_sequences` + `click_details` | Group of clicks (1, 2, 3+); `button`, `clicks`, `movement_id` (bound at the first mouse-down) |
 | `DragRecord` | `drags` + `drag_points` | Click-hold-move-release; app-generated `drag_id`; `start_t_ns`/`end_t_ns` |
-| `ScrollEvent` | `scrolls` | Single scroll event: `delta`, `x`, `y`, `t_ns`, `movement_id` |
+| `ScrollEvent` | `scrolls` | Single scroll event: `dx`, `dy` (per-axis), `x`, `y`, `t_ns`, `movement_id`; `delta` is a computed legacy property |
 
 **Keyboard records:**
 
@@ -87,7 +87,12 @@ the writer which database to use.
 | Class | DB Table | Description |
 |-------|----------|-------------|
 | `SystemEventRecord` | `system_events` | Tracks a system state change |
-| `RecordingSessionRecord` | `recording_sessions` | One recording period (start→stop) |
+| `RecordingSessionRecord` | `recording_sessions` | One recording period (start→stop), incl. `perf_counter_start_ns`/`perf_counter_end_ns` bookends |
+
+> **`recording_session_id`:** `ClickSequence`, `ScrollEvent`, `KeystrokeRecord`,
+> `KeyTransitionRecord`, and `ShortcutRecord` carry this field; `EventProcessor`
+> stamps it before the record is queued. `MovementSession`/`DragRecord` omit it —
+> their app-generated id already encodes the session.
 
 **Shared helpers:**
 

@@ -44,6 +44,16 @@ confirmed, the dispatcher explicitly ends any active movement session (`end_for_
 release leak into `ClickProcessor` as a phantom click whose `press_duration` is the
 entire drag. Guarding on the pre-call state prevents that.
 
+**Session stamping:** `EventProcessor` stamps `recording_session_id` on every
+keyboard/scroll/click record before queuing it (movements and drags encode the
+session in their id instead). This lets post-processing attribute each event to a
+recording session for fatigue / time-of-day / cross-modal analysis.
+
+**Keyboard-layout tracking:** the listener resolves the active layout (HKL) on
+every press; `_track_layout_change` emits a `SystemEventRecord`
+(`keyboard_layout_hkl`) only when it changes — per-keystroke-accurate layout
+attribution at near-zero cost, finer than the 10 s system-monitor poll.
+
 **In-memory stats:** Maintains a `StatsTracker` instance with 19 named counters
 (mouse + keyboard). Stats are updated on every processed event and read by the
 dashboard timer. No database reads — all from RAM.

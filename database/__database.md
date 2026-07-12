@@ -70,7 +70,9 @@ Each user has **three separate databases**:
 - `keystrokes.modifier_state` is stored as an **INTEGER bitmask** (bit 0=Ctrl, bit 1=Alt, bit 2=Shift, bit 3=Win), not a JSON string.
 - `click_details` uses composite primary key `(sequence_id, seq)` — no separate `id` column. Columns `x, y` hold the press (button-down) position; they are `NULL` for rows written before click coordinates were captured (legacy data).
 - `key_transitions.is_repeat` = `1` for OS auto-repeat runs (a held key firing `from_scan == to_scan` rows at the hardware repeat rate), `0` for genuine consecutive presses. Repeats are excluded from digraph/flight-time stats and kept only as a hold-to-repeat signal.
-- **Schema evolution:** columns added after the initial `delta_v3` release (`click_details.x/y`, `key_transitions.is_repeat`) are backfilled into existing databases by `_ensure_columns()` (idempotent `ALTER TABLE ADD COLUMN`), run inside the `init_*` functions. `CREATE TABLE IF NOT EXISTS` alone never alters an existing table, so this keeps old databases usable without a full migration.
+- `scrolls` stores `dx, dy` (signed per-axis amount) so horizontal and vertical scrolls stay distinguishable. The legacy `delta` column (`= dy if dy != 0 else dx`) is retained so existing readers keep working.
+- **Session attribution:** `keystrokes`, `key_transitions`, `shortcuts`, `scrolls`, and `click_sequences` carry a `recording_session_id` column (stamped by `EventProcessor`). `movements` and `drags` don't need it — their app-generated id already encodes the session (`id ÷ 1_000_000`). `recording_sessions` also has `perf_counter_end_ns`, giving a monotonic session boundary even when `ended_at` (wall clock) is NULL after a crash.
+- **Schema evolution:** columns added after the initial `delta_v3` release (`click_details.x/y`, `key_transitions.is_repeat`, the `recording_session_id` columns, `scrolls.dx/dy`, `recording_sessions.perf_counter_end_ns`) are backfilled into existing databases by `_ensure_columns()` (idempotent `ALTER TABLE ADD COLUMN`), run inside the `init_*` functions. `CREATE TABLE IF NOT EXISTS` alone never alters an existing table, so this keeps old databases usable without a full migration.
 
 > **Schema version:** `path_encoding=delta_v3` in mouse.db metadata table. `delta_v1` = old schema (absolute `t_ns` per point, auto-increment `id`). `delta_v3` = current (delta `dt_us`, composite PK, WITHOUT ROWID). Post-processing must check this key before reading path data.
 
@@ -91,6 +93,15 @@ in batches for performance. Routes each record to the correct database
 based on its `_db_target` class attribute.
 
 All database writes go through this one writer — no concurrent write issues.
+The writer re-applies the performance pragmas (`apply_pragmas`) on its own
+connections — pragmas like `synchronous=NORMAL` are per-connection, so without
+this the hot write path would silently fall back to SQLite defaults.
+
+**Flush failure handling (fail-loud):** a batch is written per target DB in one
+transaction. If that fails, the writer falls back to writing that group's
+records **one at a time**, so a single poisoned record is isolated and dropped
+(counted in `total_failed`, logged at ERROR) instead of discarding the whole
+batch of up to `BATCH_SIZE` records. This replaces the old silent drop.
 
 **Record routing:**
 

@@ -96,10 +96,17 @@ for estimating mouse polling rate from move event timestamps.
 |---------|-------------|---------------|
 | Mouse speed (1-20) | `SystemParametersInfoW(SPI_GETMOUSESPEED)` | `"10"` |
 | Mouse acceleration | `SystemParametersInfoW(SPI_GETMOUSE)` | `"True"` / `"False"` |
-| Screen resolution | `GetSystemMetrics` | `"1920x1080"` |
+| Screen resolution | `GetSystemMetrics` (primary monitor) | `"1920x1080"` |
 | Keyboard layout | `GetKeyboardLayout` | `"0x04090409"` |
+| Mouse DPI | `config.USER_DPI` | `"800"` |
+| Polling rate (Hz) | `config.ESTIMATED_POLLING_HZ` | `"1000"` (or `"None"` until estimated) |
 | Mouse button 4 label | `config.MOUSE_BUTTON4_LABEL` | `"Back"` |
 | Mouse button 5 label | `config.MOUSE_BUTTON5_LABEL` | `"Forward"` |
+
+> **Note:** DPI and polling rate are written into `session.db` so an ML consumer
+> reading the per-user databases can normalize trajectories to physical hand
+> motion. Screen resolution is the **primary** monitor only — multi-monitor
+> geometry and per-monitor DPI are not yet captured.
 
 **Classes:**
 
