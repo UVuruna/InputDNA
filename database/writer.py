@@ -22,6 +22,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import config
+from database.schema import apply_pragmas
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class DatabaseWriter:
         self._running = False
         self._thread: threading.Thread | None = None
         self._records_written = 0
+        self._records_failed = 0
         self._flushes = 0
 
     def start(self):
@@ -84,6 +86,7 @@ class DatabaseWriter:
         logger.info(
             f"Database writer stopped. "
             f"Total: {self._records_written} records in {self._flushes} flushes"
+            + (f", {self._records_failed} FAILED" if self._records_failed else "")
         )
 
     @property
@@ -96,12 +99,21 @@ class DatabaseWriter:
         """Total records written since start."""
         return self._records_written
 
+    @property
+    def total_failed(self) -> int:
+        """Total records that could not be written (isolated and dropped)."""
+        return self._records_failed
+
     def _run(self):
         """Main writer loop. Runs in dedicated thread."""
         conns = {
             name: sqlite3.connect(str(path))
             for name, path in self._db_paths.items()
         }
+        # Re-apply performance pragmas: these are per-connection, so the
+        # writer's own connections would otherwise run at SQLite defaults.
+        for conn in conns.values():
+            apply_pragmas(conn)
         batch: list = []
         last_flush = time.monotonic()
 
@@ -140,22 +152,46 @@ class DatabaseWriter:
 
     def _flush(self, conns: dict[str, sqlite3.Connection], batch: list):
         """Write a batch of records, grouped by target DB, each in its own transaction."""
-        try:
-            # Group records by target database
-            grouped: dict[str, list] = defaultdict(list)
-            for record in batch:
-                grouped[record._db_target].append(record)
+        # Group records by target database
+        grouped: dict[str, list] = defaultdict(list)
+        for record in batch:
+            grouped[record._db_target].append(record)
 
-            # Write each group in its own transaction
-            for target, records in grouped.items():
-                conn = conns[target]
-                with conn:  # Auto commit/rollback
+        written = 0
+        for target, records in grouped.items():
+            conn = conns[target]
+            try:
+                with conn:  # Auto commit/rollback for the whole group
                     for record in records:
                         record.write_to_db(conn)
+                written += len(records)
+            except Exception:
+                # One poisoned record must not discard the whole group. Retry
+                # each record individually so the healthy ones still persist,
+                # and isolate the failures loudly instead of masking data loss.
+                logger.exception(
+                    f"Batch write to {target}.db failed — falling back to "
+                    f"per-record writes for {len(records)} records"
+                )
+                written += self._flush_per_record(conn, target, records)
 
-            count = len(batch)
-            self._records_written += count
-            self._flushes += 1
-            logger.debug(f"Flushed {count} records (total: {self._records_written})")
-        except Exception:
-            logger.exception(f"Failed to flush {len(batch)} records")
+        self._records_written += written
+        self._flushes += 1
+        logger.debug(f"Flushed {written} records (total: {self._records_written})")
+
+    def _flush_per_record(self, conn: sqlite3.Connection, target: str,
+                          records: list) -> int:
+        """Write records one at a time so a single bad record is isolated, not fatal."""
+        written = 0
+        for record in records:
+            try:
+                with conn:
+                    record.write_to_db(conn)
+                written += 1
+            except Exception:
+                self._records_failed += 1
+                logger.error(
+                    f"Dropping unwritable {type(record).__name__} for {target}.db: %r",
+                    record,
+                )
+        return written

@@ -25,11 +25,24 @@ _PRAGMAS = """
 """
 
 
+def apply_pragmas(conn: sqlite3.Connection) -> None:
+    """
+    Apply the recorder's performance pragmas to a connection.
+
+    Pragmas like synchronous, cache_size, temp_store and mmap_size are
+    per-connection (only journal_mode=WAL persists in the file), so every
+    connection that writes on the hot path — not just the one that created
+    the schema — must set them, or it silently runs at SQLite defaults
+    (synchronous=FULL, tiny cache).
+    """
+    conn.executescript(_PRAGMAS)
+
+
 def _init(db_path: Path, schema: str) -> sqlite3.Connection:
     """Create database, set pragmas, create tables. Returns open connection."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
-    conn.executescript(_PRAGMAS)
+    apply_pragmas(conn)
     conn.executescript(schema)
     conn.commit()
     return conn
@@ -88,11 +101,14 @@ CREATE TABLE IF NOT EXISTS path_points (
 
 -- Click sequences (single / double / spam)
 -- movement_id: FK to movements (NULL if click without preceding movement)
--- x, y, button, timestamp, click_count, total_duration_ms: all derivable from click_details
+-- recording_session_id: owning recording session (movements/drags encode this in
+--   their app-generated id; AUTOINCREMENT tables carry it as an explicit column)
+-- button, click_count, total_duration_ms: all derivable from click_details
 CREATE TABLE IF NOT EXISTS click_sequences (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    movement_id INTEGER REFERENCES movements(id),
-    button      TEXT    NOT NULL
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    movement_id           INTEGER REFERENCES movements(id),
+    button                TEXT    NOT NULL,
+    recording_session_id  INTEGER NOT NULL DEFAULT 0
 );
 
 -- Individual clicks within sequences
@@ -136,15 +152,21 @@ CREATE TABLE IF NOT EXISTS drag_points (
 ) WITHOUT ROWID;
 
 -- Scroll wheel events
--- direction: derivable as sign(delta) in post-processing
+-- dx, dy: signed scroll amount per axis (dy = vertical +up/-down, dx = horizontal
+--   +right/-left). Preserves the axis, which the legacy merged `delta` loses.
+-- delta: legacy merged column (= dy if dy != 0 else dx), retained so existing
+--   readers keep working; NULL-free but derivable from dx/dy.
 -- timestamp: derivable from t_ns in post-processing
 CREATE TABLE IF NOT EXISTS scrolls (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    movement_id INTEGER REFERENCES movements(id),
-    delta       INTEGER NOT NULL,
-    x           INTEGER NOT NULL,
-    y           INTEGER NOT NULL,
-    t_ns        INTEGER NOT NULL
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    movement_id           INTEGER REFERENCES movements(id),
+    delta                 INTEGER NOT NULL,
+    dx                    INTEGER,
+    dy                    INTEGER,
+    x                     INTEGER NOT NULL,
+    y                     INTEGER NOT NULL,
+    t_ns                  INTEGER NOT NULL,
+    recording_session_id  INTEGER NOT NULL DEFAULT 0
 );
 
 -- Key-value metadata (path_encoding, etc.)
@@ -167,11 +189,12 @@ _KEYBOARD_SCHEMA = """
 -- modifier_state: INTEGER bitmask (bit0=Ctrl, bit1=Alt, bit2=Shift, bit3=Win)
 -- vkey, key_name, active_layout, hand, finger, timestamp: all derivable in post-processing
 CREATE TABLE IF NOT EXISTS keystrokes (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    scan_code         INTEGER NOT NULL,
-    press_duration_ms REAL    NOT NULL,
-    modifier_state    INTEGER NOT NULL,
-    t_ns              INTEGER NOT NULL
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_code             INTEGER NOT NULL,
+    press_duration_ms     REAL    NOT NULL,
+    modifier_state        INTEGER NOT NULL,
+    t_ns                  INTEGER NOT NULL,
+    recording_session_id  INTEGER NOT NULL DEFAULT 0
 );
 
 -- Delay between consecutive keys (scan code pairs)
@@ -181,26 +204,28 @@ CREATE TABLE IF NOT EXISTS keystrokes (
 --   hardware repeat rate. Excluded from digraph/flight-time stats; kept as a
 --   hold-to-repeat behavioral signal. 0 = genuine consecutive key press.
 CREATE TABLE IF NOT EXISTS key_transitions (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_scan   INTEGER NOT NULL,
-    to_scan     INTEGER NOT NULL,
-    typing_mode TEXT    NOT NULL,
-    is_repeat   INTEGER NOT NULL DEFAULT 0,
-    t_ns        INTEGER NOT NULL
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_scan             INTEGER NOT NULL,
+    to_scan               INTEGER NOT NULL,
+    typing_mode           TEXT    NOT NULL,
+    is_repeat             INTEGER NOT NULL DEFAULT 0,
+    t_ns                  INTEGER NOT NULL,
+    recording_session_id  INTEGER NOT NULL DEFAULT 0
 );
 
 -- Keyboard shortcut timing profiles
 -- shortcut_name, main_key_name, timestamp: derivable in post-processing
 CREATE TABLE IF NOT EXISTS shortcuts (
-    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-    modifier_scans       TEXT    NOT NULL,
-    main_scan            INTEGER NOT NULL,
-    modifier_to_main_ms  REAL    NOT NULL,
-    main_hold_ms         REAL    NOT NULL,
-    overlap_ms           REAL    NOT NULL,
-    total_ms             REAL    NOT NULL,
-    release_order        TEXT    NOT NULL,
-    t_ns                 INTEGER NOT NULL
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    modifier_scans        TEXT    NOT NULL,
+    main_scan             INTEGER NOT NULL,
+    modifier_to_main_ms   REAL    NOT NULL,
+    main_hold_ms          REAL    NOT NULL,
+    overlap_ms            REAL    NOT NULL,
+    total_ms              REAL    NOT NULL,
+    release_order         TEXT    NOT NULL,
+    t_ns                  INTEGER NOT NULL,
+    recording_session_id  INTEGER NOT NULL DEFAULT 0
 );
 
 """
@@ -213,6 +238,8 @@ CREATE TABLE IF NOT EXISTS shortcuts (
 _SESSION_SCHEMA = """
 
 -- Recording periods (start/end/counts)
+-- perf_counter_start_ns / perf_counter_end_ns: monotonic bookends of the session,
+--   giving a recoverable boundary even when ended_at (wall clock) is NULL on crash
 CREATE TABLE IF NOT EXISTS recording_sessions (
     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at             TEXT    NOT NULL,
@@ -220,7 +247,8 @@ CREATE TABLE IF NOT EXISTS recording_sessions (
     total_movements        INTEGER DEFAULT 0,
     total_clicks           INTEGER DEFAULT 0,
     total_keystrokes       INTEGER DEFAULT 0,
-    perf_counter_start_ns  INTEGER NOT NULL
+    perf_counter_start_ns  INTEGER NOT NULL,
+    perf_counter_end_ns    INTEGER
 );
 
 -- System state changes (mouse speed, layout, resolution, etc.)
@@ -243,6 +271,10 @@ CREATE TABLE IF NOT EXISTS metadata (
 
 # ── Public init functions ───────────────────────────────────
 
+_SESSION_ID_COL = ("recording_session_id",
+                   "recording_session_id INTEGER NOT NULL DEFAULT 0")
+
+
 def init_mouse_db(db_path: Path) -> sqlite3.Connection:
     """Create mouse database with movement/click/drag/scroll tables."""
     conn = _init(db_path, _MOUSE_SCHEMA)
@@ -250,6 +282,12 @@ def init_mouse_db(db_path: Path) -> sqlite3.Connection:
     _ensure_columns(conn, "click_details", [
         ("x", "x INTEGER"),
         ("y", "y INTEGER"),
+    ])
+    _ensure_columns(conn, "click_sequences", [_SESSION_ID_COL])
+    _ensure_columns(conn, "scrolls", [
+        ("dx", "dx INTEGER"),
+        ("dy", "dy INTEGER"),
+        _SESSION_ID_COL,
     ])
     # Signal schema version to post-processing readers
     conn.execute(
@@ -266,11 +304,19 @@ def init_keyboard_db(db_path: Path) -> sqlite3.Connection:
     # Backfill columns added after the initial delta_v3 release.
     _ensure_columns(conn, "key_transitions", [
         ("is_repeat", "is_repeat INTEGER NOT NULL DEFAULT 0"),
+        _SESSION_ID_COL,
     ])
+    _ensure_columns(conn, "keystrokes", [_SESSION_ID_COL])
+    _ensure_columns(conn, "shortcuts", [_SESSION_ID_COL])
     conn.commit()
     return conn
 
 
 def init_session_db(db_path: Path) -> sqlite3.Connection:
     """Create session database with recording sessions/system events/metadata."""
-    return _init(db_path, _SESSION_SCHEMA)
+    conn = _init(db_path, _SESSION_SCHEMA)
+    _ensure_columns(conn, "recording_sessions", [
+        ("perf_counter_end_ns", "perf_counter_end_ns INTEGER"),
+    ])
+    conn.commit()
+    return conn
