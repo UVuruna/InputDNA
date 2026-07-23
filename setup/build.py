@@ -34,6 +34,11 @@ from version import __version__ as APP_VERSION
 # ── App metadata ──────────────────────────────────────────────
 # All metadata (project-specific + company-level) lives in setup/app_info.json
 APP_INFO = json.loads((SETUP_DIR / "app_info.json").read_text(encoding="utf-8"))
+# Company-level metadata is owned by the monorepo-root company.json (single
+# source — never duplicated per project). CompanyName in the exe comes from
+# here, so the company legend shows "UVuruna", not a stale per-project value.
+COMPANY_JSON_PATH = PROJECT_DIR.parent.parent / "company.json"
+COMPANY = json.loads(COMPANY_JSON_PATH.read_text(encoding="utf-8"))
 VERSION_INFO_PATH = SETUP_DIR / "_version_info.py"  # generated at build time, gitignored
 
 DIST_DIR = PROJECT_DIR / "dist"
@@ -42,9 +47,19 @@ BUILD_DIR = PROJECT_DIR / "build"
 ICON_PATH = SETUP_DIR / "InputDNA.ico"              # dark variant — exe, shortcuts
 SETUP_ICON_PATH = SETUP_DIR / "InputDNA-setup.ico"  # light variant — installer wizard
 CERT_PATH = SETUP_DIR / "cert" / "InputDNA.pfx"
+PASSWORD_PATH = SETUP_DIR / "cert" / "password.txt"   # gitignored (never hardcode)
 NSI_PATH = SETUP_DIR / "installer.nsi"
 
-CERT_PASSWORD = "InputDNA2025"
+
+def _load_password() -> str | None:
+    """Read the certificate password from the gitignored password file.
+    Never hardcode it in build.py (root CLAUDE.md build pipeline)."""
+    if not PASSWORD_PATH.exists():
+        return None
+    return PASSWORD_PATH.read_text(encoding="utf-8").strip()
+
+
+CERT_PASSWORD = _load_password()
 APP_NAME = "InputDNA"
 ENTRY_POINT = PROJECT_DIR / "main.py"
 
@@ -76,7 +91,7 @@ def generate_version_info() -> None:
       StringTable(
         '040904B0',
         [
-          StringStruct('CompanyName',      {APP_INFO['company_name']!r}),
+          StringStruct('CompanyName',      {COMPANY['company_name']!r}),
           StringStruct('FileDescription',  {APP_INFO['description']!r}),
           StringStruct('FileVersion',      {ver_str!r}),
           StringStruct('InternalName',     {APP_INFO['name']!r}),
@@ -92,7 +107,7 @@ def generate_version_info() -> None:
 )
 """
     VERSION_INFO_PATH.write_text(content, encoding="utf-8")
-    print(f"Version info: {APP_INFO['company_name']} / {APP_INFO['name']} "
+    print(f"Version info: {COMPANY['company_name']} / {APP_INFO['name']} "
           f"/ {APP_INFO['description']} / {ver_str} / {APP_INFO['copyright_string']}")
 
 
@@ -260,6 +275,11 @@ def sign_file(path: Path, what: str) -> bool:
         print("  Skipping signing...")
         return False
 
+    if not CERT_PASSWORD:
+        print(f"  WARNING: Password file not found: {PASSWORD_PATH}")
+        print("  Skipping signing...")
+        return False
+
     signtool = _find_signtool()
     if not signtool:
         print("  WARNING: signtool.exe not found.")
@@ -312,7 +332,7 @@ def build_installer():
         f"/DDIST_DIR={DIST_DIR}",
         f"/DSETUP_DIR={SETUP_DIR}",
         f"/DAPP_VERSION={APP_VERSION}",
-        f"/DAPP_PUBLISHER={APP_INFO['company_name']}",
+        f"/DAPP_PUBLISHER={COMPANY['company_name']}",
         str(NSI_PATH),
     ]
 
@@ -343,7 +363,7 @@ def verify_build(exe_path: Path, installer_path: Path):
     (no CompanyName, unsigned installer) produces no error on its own — it
     just ships broken metadata — so nothing but an explicit check catches it.
 
-    Asserts: exe CompanyName == app_info.json, exe FileVersion == version.py,
+    Asserts: exe CompanyName == company.json, exe FileVersion == version.py,
     and (when a signing cert is configured) both exe AND installer are signed.
     """
     step("VERIFY  metadata + signatures (build fails if anything is missing)")
@@ -353,7 +373,7 @@ def verify_build(exe_path: Path, installer_path: Path):
         f"$v=(Get-Item '{exe_path}').VersionInfo; "
         f"\"$($v.CompanyName)|$($v.FileVersion)\"")
     company, _, file_version = info.partition("|")
-    expected_company = APP_INFO["company_name"]
+    expected_company = COMPANY["company_name"]
     if company != expected_company:
         problems.append(
             f"exe CompanyName is {company!r}, expected {expected_company!r} "
