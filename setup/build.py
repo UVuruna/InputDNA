@@ -228,36 +228,44 @@ def build_pyinstaller():
     return exe_path
 
 
-def sign_exe(exe_path: Path):
-    step("3/4  Signing exe with certificate")
+def _find_signtool() -> str | None:
+    """Locate signtool.exe (PATH first, then the Windows SDK)."""
+    signtool = shutil.which("signtool")
+    if signtool:
+        return signtool
+    sdk_paths = [
+        Path(r"C:\Program Files (x86)\Windows Kits\10\bin"),
+        Path(r"C:\Program Files\Windows Kits\10\bin"),
+    ]
+    for sdk_base in sdk_paths:
+        if sdk_base.exists():
+            versions = sorted(sdk_base.glob("10.*/x64/signtool.exe"))
+            if versions:
+                return str(versions[-1])
+    return None
 
+
+def sign_file(path: Path, what: str) -> bool:
+    """Authenticode-sign one file with the project certificate.
+
+    Reused for BOTH the inner exe AND the distributed installer — signing
+    only the inner exe leaves the file the user actually runs (the installer)
+    unsigned, which defeats the SmartScreen mitigation. Returns True when the
+    file was signed, False when a prerequisite was missing (skipped, not an
+    error — signing is the documented-optional step).
+    """
     if not CERT_PATH.exists():
         print(f"  WARNING: Certificate not found: {CERT_PATH}")
         print("  Run 'python setup/create_cert.py' first.")
         print("  Skipping signing...")
-        return
+        return False
 
-    # Use signtool from Windows SDK
-    signtool = shutil.which("signtool")
-    if not signtool:
-        # Try common Windows SDK locations
-        sdk_paths = [
-            Path(r"C:\Program Files (x86)\Windows Kits\10\bin"),
-            Path(r"C:\Program Files\Windows Kits\10\bin"),
-        ]
-        for sdk_base in sdk_paths:
-            if sdk_base.exists():
-                # Find latest version
-                versions = sorted(sdk_base.glob("10.*/x64/signtool.exe"))
-                if versions:
-                    signtool = str(versions[-1])
-                    break
-
+    signtool = _find_signtool()
     if not signtool:
         print("  WARNING: signtool.exe not found.")
         print("  Install Windows SDK or add signtool to PATH.")
         print("  Skipping signing...")
-        return
+        return False
 
     cmd = [
         signtool, "sign",
@@ -265,11 +273,17 @@ def sign_exe(exe_path: Path):
         "/p", CERT_PASSWORD,
         "/fd", "SHA256",
         "/t", "http://timestamp.digicert.com",
-        str(exe_path),
+        str(path),
     ]
 
     run(cmd)
-    print("  Exe signed successfully.")
+    print(f"  {what.capitalize()} signed successfully.")
+    return True
+
+
+def sign_exe(exe_path: Path):
+    step("3/4  Signing exe with certificate")
+    sign_file(exe_path, "exe")
 
 
 def build_installer():
@@ -306,11 +320,63 @@ def build_installer():
 
     installer_path = DIST_DIR / f"{APP_NAME}_Setup.exe"
     if installer_path.exists():
+        # Sign the installer itself — this is the file the user downloads and
+        # runs, so it (not just the inner exe) must carry the signature.
+        sign_file(installer_path, "installer")
         print(f"  Installer: {installer_path}")
         size_mb = installer_path.stat().st_size / (1024 * 1024)
         print(f"  Size: {size_mb:.1f} MB")
     else:
         print("  WARNING: Installer exe not found at expected location.")
+
+
+def _powershell(script: str) -> str:
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script],
+        capture_output=True, text=True)
+    return result.stdout.strip()
+
+
+def verify_build(exe_path: Path, installer_path: Path):
+    """Fail-closed gate: assert the OUTPUT actually carries what the pipeline
+    promises, instead of trusting that every step ran. A missing step here
+    (no CompanyName, unsigned installer) produces no error on its own — it
+    just ships broken metadata — so nothing but an explicit check catches it.
+
+    Asserts: exe CompanyName == app_info.json, exe FileVersion == version.py,
+    and (when a signing cert is configured) both exe AND installer are signed.
+    """
+    step("VERIFY  metadata + signatures (build fails if anything is missing)")
+    problems = []
+
+    info = _powershell(
+        f"$v=(Get-Item '{exe_path}').VersionInfo; "
+        f"\"$($v.CompanyName)|$($v.FileVersion)\"")
+    company, _, file_version = info.partition("|")
+    expected_company = APP_INFO["company_name"]
+    if company != expected_company:
+        problems.append(
+            f"exe CompanyName is {company!r}, expected {expected_company!r} "
+            "(version resource missing/empty — company legends show 'Unknown')")
+    if APP_VERSION not in file_version:
+        problems.append(
+            f"exe FileVersion is {file_version!r}, expected to contain {APP_VERSION!r}")
+
+    # Signing is documented-optional: only assert it when a cert is configured.
+    if CERT_PATH.exists() and CERT_PASSWORD:
+        for label, target in (("exe", exe_path), ("installer", installer_path)):
+            status = _powershell(f"(Get-AuthenticodeSignature '{target}').Status")
+            if status in ("", "NotSigned"):
+                problems.append(f"{label} is NOT signed (status {status or 'missing'!r})")
+
+    if problems:
+        for p in problems:
+            print(f"  FAIL: {p}")
+        print("\n  Build produced artifacts but they FAIL the pipeline contract.")
+        sys.exit(1)
+
+    print(f"  OK: CompanyName={company!r}  FileVersion={file_version!r}")
+    print("  OK: exe + installer signed")
 
 
 def main():
@@ -326,6 +392,7 @@ def main():
     exe_path = build_pyinstaller()
     sign_exe(exe_path)
     build_installer()
+    verify_build(exe_path, DIST_DIR / f"{APP_NAME}_Setup.exe")
 
     step("BUILD COMPLETE")
     print(f"  Installer: {DIST_DIR / f'{APP_NAME}_Setup.exe'}")
